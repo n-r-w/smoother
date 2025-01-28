@@ -2,6 +2,9 @@
 
 Smoother is a Go package that provides traffic smoothing capabilities by introducing controlled delays to maintain a target request rate. Unlike traditional rate limiters that reject excess requests, Smoother keeps all requests active while ensuring a consistent throughput through intelligent request spacing.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/n-r-w/smoother.svg)](https://pkg.go.dev/github.com/n-r-w/smoother)
+![CI Status](https://github.com/n-r-w/smoother/actions/workflows/go.yml/badge.svg)
+
 ## Features
 
 - 🎯 Maintains target RPS through controlled delays rather than request rejection
