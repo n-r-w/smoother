@@ -39,16 +39,28 @@ const (
 	FallbackTryerStatusFallback FallbackTryerStatus = 1
 )
 
-// StatusChangedFunc is a function that is called when the status of the breaker changes.
-type StatusChangedFunc func(ctx context.Context, status FallbackTryerStatus)
+type (
+	// FallbackTryerStatusChangedFunc is a function that is called when the status of the breaker changes.
+	FallbackTryerStatusChangedFunc func(ctx context.Context, status FallbackTryerStatus)
 
-// FallbackTryerOption is a function that configures a FallbackTryer.
-type FallbackTryerOption func(*FallbackTryer)
+	// FallbackTryerErrorFunc is a function that is called when an error occurs.
+	FallbackTryerErrorFunc func(ctx context.Context, err error)
+
+	// FallbackTryerOption is a function that configures a FallbackTryer.
+	FallbackTryerOption func(*FallbackTryer)
+)
 
 // WithFallbackTryerStatusChangedFunc sets the status changed function for the FallbackTryer.
-func WithFallbackTryerStatusChangedFunc(statusChangedFunc StatusChangedFunc) FallbackTryerOption {
+func WithFallbackTryerStatusChangedFunc(statusChangedFunc FallbackTryerStatusChangedFunc) FallbackTryerOption {
 	return func(f *FallbackTryer) {
 		f.statusChangedFunc = statusChangedFunc
+	}
+}
+
+// WithFallbackTryerErrorFunc sets the error function for the FallbackTryer.
+func WithFallbackTryerErrorFunc(errorFunc FallbackTryerErrorFunc) FallbackTryerOption {
+	return func(f *FallbackTryer) {
+		f.errorFunc = errorFunc
 	}
 }
 
@@ -84,7 +96,8 @@ type FallbackTryer struct {
 	errorThreshold    int
 	successThreshold  int
 	timeout           time.Duration
-	statusChangedFunc StatusChangedFunc
+	statusChangedFunc FallbackTryerStatusChangedFunc
+	errorFunc         FallbackTryerErrorFunc
 }
 
 var _ Tryer = (*FallbackTryer)(nil)
@@ -119,6 +132,10 @@ func (f *FallbackTryer) TryTake(ctx context.Context, count uint32) (bool, time.D
 		var err error
 		allowed, waitTime, err = f.main.TryTake(ctx, count)
 
+		if err != nil && f.errorFunc != nil {
+			f.errorFunc(ctx, err)
+		}
+
 		// we maintain the load state in fallback, so it was correct
 		// when switching. errors are ignored
 		_, _, _ = f.fallback.TryTake(ctx, count)
@@ -133,7 +150,13 @@ func (f *FallbackTryer) TryTake(ctx context.Context, count uint32) (bool, time.D
 	case breaker.ErrBreakerOpen: // errors.Is is not needed
 		// our function wasn't run because the breaker was open
 		f.closeToOpenProcess(ctx)
-		return f.fallback.TryTake(ctx, count)
+
+		allowed, waitTime, err = f.fallback.TryTake(ctx, count)
+		if err != nil && f.errorFunc != nil {
+			f.errorFunc(ctx, err)
+		}
+
+		return allowed, waitTime, err
 	default:
 		// some other error
 		return allowed, waitTime, nil
