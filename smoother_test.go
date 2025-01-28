@@ -26,7 +26,7 @@ func setupThrottledTryer(t *testing.T) getTestTryer {
 
 	tryerGetter := func(rps uint32) Tryer {
 		tryer, err := NewRedisThrottledTryer(
-			client, 1, "test", rps)
+			client, "test", rps)
 		require.NoError(t, err)
 		return tryer
 	}
@@ -43,7 +43,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	require.NoError(t, client.Ping(context.Background()).Err())
 
 	tryerGetter := func(rps uint32) Tryer {
-		tryer := NewRedisRateTryer(client, 1, "test", rps)
+		tryer := NewRedisRateTryer(client, "test", rps)
 
 		return tryer
 	}

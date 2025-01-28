@@ -31,7 +31,7 @@ var _ Tryer = (*RedisRateTryer)(nil)
 
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(
-	redisClient redis.UniversalClient, group int, key string, rps uint32, opts ...RedisRateTryerOption,
+	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisRateTryerOption,
 ) *RedisRateTryer {
 	redisLimiter := redis_rate.NewLimiter(redisClient)
 
@@ -41,7 +41,7 @@ func NewRedisRateTryer(
 			Rate:   int(rps),
 			Period: time.Second,
 		},
-		key:              fmt.Sprintf("group:%s:%d", key, group),
+		key:              key,
 		burstFromRPSFunc: DefaultBurstFromRPS,
 	}
 

@@ -53,13 +53,13 @@ func main() {
 	localTryer := smoother.NewLocalTryer(rps)
 
 	// github.com/throttled/throttled/v2 tryer
-	throttledTryer, err := smoother.NewRedisThrottledTryer(client, 1, "test", rps)
+	throttledTryer, err := smoother.NewRedisThrottledTryer(client, "test", rps)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// github.com/go-redis/redis_rate/v10 tryer
-	redisRateTryer := smoother.NewRedisRateTryer(client, 1, "test", rps)
+	redisRateTryer := smoother.NewRedisRateTryer(client, "test", rps)
 	if err != nil {
 		log.Fatal(err)
 	}

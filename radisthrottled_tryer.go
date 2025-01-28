@@ -35,7 +35,7 @@ var _ Tryer = (*RedisThrottledTryer)(nil)
 
 // NewRedisThrottledTryer creates a new RedisThrottledTryer.
 func NewRedisThrottledTryer(
-	redisClient redis.UniversalClient, group int, key string, rps uint32, opts ...RedisThrottledTryerOption,
+	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisThrottledTryerOption,
 ) (*RedisThrottledTryer, error) {
 	store, err := goredisstore.NewCtx(redisClient, "throttled:")
 	if err != nil {
@@ -43,7 +43,7 @@ func NewRedisThrottledTryer(
 	}
 
 	t := &RedisThrottledTryer{
-		key:              fmt.Sprintf("%s:%d", key, group),
+		key:              key,
 		burstFromRPSFunc: DefaultBurstFromRPS,
 	}
 
