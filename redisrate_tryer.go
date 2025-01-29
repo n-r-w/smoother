@@ -31,10 +31,18 @@ var _ Tryer = (*RedisRateTryer)(nil)
 
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(
-	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisRateTryerOption,
+	redisClient redis.UniversalClient, key string, rps int, opts ...RedisRateTryerOption,
 ) (*RedisRateTryer, error) {
 	if redisClient == nil {
 		return nil, fmt.Errorf("NewRedisRateTryer: redisClient is nil")
+	}
+
+	if key == "" {
+		return nil, fmt.Errorf("NewRedisRateTryer: key is empty")
+	}
+
+	if rps <= 0 {
+		return nil, fmt.Errorf("NewRedisRateTryer: invalid rps %d", rps)
 	}
 
 	redisLimiter := redis_rate.NewLimiter(redisClient)
@@ -42,7 +50,7 @@ func NewRedisRateTryer(
 	t := &RedisRateTryer{
 		redisLimiter: redisLimiter,
 		limit: redis_rate.Limit{
-			Rate:   int(rps),
+			Rate:   rps,
 			Period: time.Second,
 		},
 		key:              key,
@@ -57,7 +65,7 @@ func NewRedisRateTryer(
 		return nil, fmt.Errorf("NewRedisRateTryer: %w", err)
 	}
 
-	t.limit.Burst = t.burstFromRPSFunc(int(rps))
+	t.limit.Burst = t.burstFromRPSFunc(rps)
 
 	return t, nil
 }
@@ -70,14 +78,14 @@ func (r *RedisRateTryer) validateOptions() error {
 // TryTake attempts to take n requests.
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
-func (r *RedisRateTryer) TryTake(ctx context.Context, count uint32) (bool, time.Duration, error) {
+func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
 	// Burst should be at least the number of requests, otherwise it will hang
 	limit := r.limit
-	minBurst := int(count) + 1
+	minBurst := count + 1
 	if limit.Burst < minBurst {
 		limit.Burst = minBurst
 	}
-	res, err := r.redisLimiter.AllowN(ctx, r.key, limit, int(count))
+	res, err := r.redisLimiter.AllowN(ctx, r.key, limit, count)
 	if err != nil {
 		return false, 0, fmt.Errorf("redis: %w", err)
 	}

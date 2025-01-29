@@ -90,7 +90,7 @@ func WithFallbackTryerTimeout(timeout time.Duration) FallbackTryerOption {
 // If the main Tryer fails, it uses the fallback Tryer using circuit breaker pattern.
 type FallbackTryer struct {
 	breaker          *breaker.Breaker
-	lastBreakerState atomic.Uint32
+	lastBreakerState atomic.Int32
 
 	main              Tryer
 	fallback          Tryer
@@ -129,7 +129,7 @@ func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) (*Fallb
 	}
 
 	f.breaker = breaker.New(f.errorThreshold, f.successThreshold, f.timeout)
-	f.lastBreakerState.Store(uint32(breaker.Closed))
+	f.lastBreakerState.Store(int32(breaker.Closed))
 
 	return f, nil
 }
@@ -148,7 +148,7 @@ func (f *FallbackTryer) validateOptions() error {
 }
 
 // TryTake attempts to take n requests.
-func (f *FallbackTryer) TryTake(ctx context.Context, count uint32) (bool, time.Duration, error) {
+func (f *FallbackTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
 	var (
 		waitTime time.Duration
 		allowed  bool
@@ -189,7 +189,7 @@ func (f *FallbackTryer) TryTake(ctx context.Context, count uint32) (bool, time.D
 }
 
 func (f *FallbackTryer) closeToOpenProcess(ctx context.Context) {
-	if f.lastBreakerState.CompareAndSwap(uint32(breaker.Closed), uint32(breaker.Open)) {
+	if f.lastBreakerState.CompareAndSwap(int32(breaker.Closed), int32(breaker.Open)) {
 		if f.statusChangedFunc != nil {
 			f.statusChangedFunc(ctx, FallbackTryerStatusFallback)
 		}
@@ -197,7 +197,7 @@ func (f *FallbackTryer) closeToOpenProcess(ctx context.Context) {
 }
 
 func (f *FallbackTryer) openToCloseProcess(ctx context.Context) {
-	if f.lastBreakerState.CompareAndSwap(uint32(breaker.Open), uint32(breaker.Closed)) {
+	if f.lastBreakerState.CompareAndSwap(int32(breaker.Open), int32(breaker.Closed)) {
 		if f.statusChangedFunc != nil {
 			f.statusChangedFunc(ctx, FallbackTryerStatusMain)
 		}
