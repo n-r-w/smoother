@@ -61,7 +61,7 @@ func (r *RateSmoother) validateOptions() error {
 // Take blocks to ensure that the time spent between multiple Take calls is on average per/rate.
 // The count parameter specifies how many tokens to take at once.
 // It returns the time at which function waits for allowance.
-func (r *RateSmoother) Take(ctx context.Context, count uint32) (time.Duration, error) {
+func (r *RateSmoother) Take(ctx context.Context, count int) (time.Duration, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

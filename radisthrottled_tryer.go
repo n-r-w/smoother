@@ -35,15 +35,23 @@ var _ Tryer = (*RedisThrottledTryer)(nil)
 
 // NewRedisThrottledTryer creates a new RedisThrottledTryer.
 func NewRedisThrottledTryer(
-	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisThrottledTryerOption,
+	redisClient redis.UniversalClient, key string, rps int, opts ...RedisThrottledTryerOption,
 ) (*RedisThrottledTryer, error) {
 	if redisClient == nil {
-		return nil, fmt.Errorf("redisClient is nil")
+		return nil, fmt.Errorf("NewRedisThrottledTryer:redisClient is nil")
+	}
+
+	if key == "" {
+		return nil, fmt.Errorf("NewRedisThrottledTryer: key is empty")
+	}
+
+	if rps <= 0 {
+		return nil, fmt.Errorf("NewRedisThrottledTryer: invalid rps %d", rps)
 	}
 
 	store, err := goredisstore.NewCtx(redisClient, "throttled:")
 	if err != nil {
-		return nil, fmt.Errorf("goredisstore.NewCtx: %w", err)
+		return nil, fmt.Errorf("NewRedisThrottledTryer, goredisstore.NewCtx: %w", err)
 	}
 
 	t := &RedisThrottledTryer{
@@ -62,11 +70,11 @@ func NewRedisThrottledTryer(
 	reseter := func() (*throttled.GCRARateLimiterCtx, error) {
 		rateLimiter, err := throttled.NewGCRARateLimiterCtx(store,
 			throttled.RateQuota{
-				MaxRate:  throttled.PerSec(int(rps)),
-				MaxBurst: t.burstFromRPSFunc(int(rps)),
+				MaxRate:  throttled.PerSec(rps),
+				MaxBurst: t.burstFromRPSFunc(rps),
 			})
 		if err != nil {
-			return nil, fmt.Errorf("hrottled.NewGCRARateLimiterCtx: %w", err)
+			return nil, fmt.Errorf("NewRedisThrottledTryer, throttled.NewGCRARateLimiterCtx: %w", err)
 		}
 
 		return rateLimiter, nil
@@ -91,11 +99,11 @@ func (r *RedisThrottledTryer) validateOptions() error {
 // TryTake attempts to take n requests.
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
-func (r *RedisThrottledTryer) TryTake(ctx context.Context, count uint32) (bool, time.Duration, error) {
+func (r *RedisThrottledTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	limited, res, err := r.rateLimiter.RateLimitCtx(ctx, r.key, int(count))
+	limited, res, err := r.rateLimiter.RateLimitCtx(ctx, r.key, count)
 	if err != nil {
 		// throttled does not have a bug handling cancellation of the context,
 		// this is a workaround

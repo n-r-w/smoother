@@ -2,6 +2,7 @@ package smoother
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -17,7 +18,11 @@ type LocalTryer struct {
 var _ Tryer = (*LocalTryer)(nil)
 
 // NewLocalTryer creates a new LocalTryer instance.
-func NewLocalTryer(rps uint32) (*LocalTryer, error) {
+func NewLocalTryer(rps int) (*LocalTryer, error) {
+	if rps <= 0 {
+		return nil, fmt.Errorf("NewLocalTryer: invalid rps %d", rps)
+	}
+
 	return &LocalTryer{
 		minInterval: time.Second / time.Duration(rps),
 	}, nil
@@ -26,7 +31,15 @@ func NewLocalTryer(rps uint32) (*LocalTryer, error) {
 // TryTake attempts to take n requests.
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
-func (r *LocalTryer) TryTake(_ context.Context, count uint32) (ok bool, duration time.Duration, err error) {
+func (r *LocalTryer) TryTake(_ context.Context, count int) (ok bool, duration time.Duration, err error) {
+	if count < 0 {
+		return false, 0, fmt.Errorf("TryTake: invalid count %d", count)
+	}
+
+	if count == 0 {
+		return true, 0, nil
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
