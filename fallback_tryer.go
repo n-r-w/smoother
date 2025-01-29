@@ -2,6 +2,7 @@ package smoother
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -103,7 +104,14 @@ type FallbackTryer struct {
 var _ Tryer = (*FallbackTryer)(nil)
 
 // NewFallbackTryer creates a new FallbackTryer instance.
-func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) *FallbackTryer {
+func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) (*FallbackTryer, error) {
+	if main == nil {
+		return nil, fmt.Errorf("NewFallbackTryer: nil main tryer")
+	}
+	if fallback == nil {
+		return nil, fmt.Errorf("NewFallbackTryer: nil fallback tryer")
+	}
+
 	f := &FallbackTryer{
 		main:             main,
 		fallback:         fallback,
@@ -116,10 +124,27 @@ func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) *Fallba
 		opt(f)
 	}
 
+	if err := f.validateOptions(); err != nil {
+		return nil, fmt.Errorf("NewFallbackTryer: %w", err)
+	}
+
 	f.breaker = breaker.New(f.errorThreshold, f.successThreshold, f.timeout)
 	f.lastBreakerState.Store(uint32(breaker.Closed))
 
-	return f
+	return f, nil
+}
+
+func (f *FallbackTryer) validateOptions() error {
+	if f.errorThreshold <= 0 {
+		return fmt.Errorf("error threshold must be greater than 0")
+	}
+	if f.successThreshold <= 0 {
+		return fmt.Errorf("success threshold must be greater than 0")
+	}
+	if f.timeout <= 0 {
+		return fmt.Errorf("timeout must be greater than 0")
+	}
+	return nil
 }
 
 // TryTake attempts to take n requests.

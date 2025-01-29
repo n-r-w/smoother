@@ -29,7 +29,11 @@ type RateSmoother struct {
 }
 
 // NewRateSmoother creates a new RateSmoother instance.
-func NewRateSmoother(tryer Tryer, opts ...Option) *RateSmoother {
+func NewRateSmoother(tryer Tryer, opts ...Option) (*RateSmoother, error) {
+	if tryer == nil {
+		return nil, fmt.Errorf("NewRateSmoother: nil tryer")
+	}
+
 	s := &RateSmoother{
 		timer:   time.NewTimer(0),
 		tryer:   tryer,
@@ -40,7 +44,18 @@ func NewRateSmoother(tryer Tryer, opts ...Option) *RateSmoother {
 		opt(s)
 	}
 
-	return s
+	if err := s.validateOptions(); err != nil {
+		return nil, fmt.Errorf("NewRateSmoother: %w", err)
+	}
+
+	return s, nil
+}
+
+func (r *RateSmoother) validateOptions() error {
+	if r.timeout <= 0 {
+		return fmt.Errorf("timeout must be positive")
+	}
+	return nil
 }
 
 // Take blocks to ensure that the time spent between multiple Take calls is on average per/rate.

@@ -37,6 +37,10 @@ var _ Tryer = (*RedisThrottledTryer)(nil)
 func NewRedisThrottledTryer(
 	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisThrottledTryerOption,
 ) (*RedisThrottledTryer, error) {
+	if redisClient == nil {
+		return nil, fmt.Errorf("redisClient is nil")
+	}
+
 	store, err := goredisstore.NewCtx(redisClient, "throttled:")
 	if err != nil {
 		return nil, fmt.Errorf("goredisstore.NewCtx: %w", err)
@@ -49,6 +53,10 @@ func NewRedisThrottledTryer(
 
 	for _, opt := range opts {
 		opt(t)
+	}
+
+	if err := t.validateOptions(); err != nil {
+		return nil, fmt.Errorf("NewRedisThrottledTryer: %w", err)
 	}
 
 	reseter := func() (*throttled.GCRARateLimiterCtx, error) {
@@ -73,6 +81,11 @@ func NewRedisThrottledTryer(
 	t.reseter = reseter
 
 	return t, nil
+}
+
+func (r *RedisThrottledTryer) validateOptions() error {
+	// nothing to validate for now
+	return nil
 }
 
 // TryTake attempts to take n requests.

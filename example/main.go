@@ -50,7 +50,10 @@ func main() {
 	}
 
 	// in memory tryer
-	localTryer := smoother.NewLocalTryer(rps)
+	localTryer, err := smoother.NewLocalTryer(rps)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// github.com/throttled/throttled/v2 tryer
 	throttledTryer, err := smoother.NewRedisThrottledTryer(client, "test", rps)
@@ -59,7 +62,7 @@ func main() {
 	}
 
 	// github.com/go-redis/redis_rate/v10 tryer
-	redisRateTryer := smoother.NewRedisRateTryer(client, "test", rps)
+	redisRateTryer, err := smoother.NewRedisRateTryer(client, "test", rps)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,7 +76,7 @@ func main() {
 	}
 
 	// Add circuit breaker with inmemory fallback
-	tryer = smoother.NewFallbackTryer(tryer, localTryer,
+	tryer, err = smoother.NewFallbackTryer(tryer, localTryer,
 		smoother.WithFallbackTryerErrorThreshold(breakerErrorThreshold),
 		smoother.WithFallbackTryerSuccessThreshold(breakerSuccessThreshold),
 		smoother.WithFallbackTryerTimeout(breakerTimeout),
@@ -82,11 +85,17 @@ func main() {
 				fmt.Printf("FallbackTryer status changed: %s\n", status)
 			}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sm, err := smoother.NewRateSmoother(tryer, smoother.WithTimeout(requestTimeout))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// generate rps
-	generateRPS(
-		smoother.NewRateSmoother(tryer, smoother.WithTimeout(requestTimeout)),
-		clientCount)
+	generateRPS(sm, clientCount)
 
 	time.Sleep(time.Hour)
 }

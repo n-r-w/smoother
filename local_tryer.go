@@ -17,10 +17,10 @@ type LocalTryer struct {
 var _ Tryer = (*LocalTryer)(nil)
 
 // NewLocalTryer creates a new LocalTryer instance.
-func NewLocalTryer(rps uint32) *LocalTryer {
+func NewLocalTryer(rps uint32) (*LocalTryer, error) {
 	return &LocalTryer{
 		minInterval: time.Second / time.Duration(rps),
-	}
+	}, nil
 }
 
 // TryTake attempts to take n requests.

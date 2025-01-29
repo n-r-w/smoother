@@ -32,7 +32,11 @@ var _ Tryer = (*RedisRateTryer)(nil)
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(
 	redisClient redis.UniversalClient, key string, rps uint32, opts ...RedisRateTryerOption,
-) *RedisRateTryer {
+) (*RedisRateTryer, error) {
+	if redisClient == nil {
+		return nil, fmt.Errorf("NewRedisRateTryer: redisClient is nil")
+	}
+
 	redisLimiter := redis_rate.NewLimiter(redisClient)
 
 	t := &RedisRateTryer{
@@ -49,9 +53,18 @@ func NewRedisRateTryer(
 		opt(t)
 	}
 
+	if err := t.validateOptions(); err != nil {
+		return nil, fmt.Errorf("NewRedisRateTryer: %w", err)
+	}
+
 	t.limit.Burst = t.burstFromRPSFunc(int(rps))
 
-	return t
+	return t, nil
+}
+
+func (r *RedisRateTryer) validateOptions() error {
+	// nothing to validate for now
+	return nil
 }
 
 // TryTake attempts to take n requests.
