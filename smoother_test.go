@@ -43,8 +43,8 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	require.NoError(t, client.Ping(context.Background()).Err())
 
 	tryerGetter := func(rps uint32) Tryer {
-		tryer := NewRedisRateTryer(client, "test", rps)
-
+		tryer, err := NewRedisRateTryer(client, "test", rps)
+		require.NoError(t, err)
 		return tryer
 	}
 
@@ -55,7 +55,9 @@ func setupTestLocalTryer(t *testing.T) getTestTryer {
 	t.Helper()
 
 	tryerGetter := func(rps uint32) Tryer {
-		return NewLocalTryer(rps)
+		tryer, err := NewLocalTryer(rps)
+		require.NoError(t, err)
+		return tryer
 	}
 
 	return tryerGetter
@@ -127,7 +129,8 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			tryer := tryerGetter(tt.rps)
-			smoother := NewRateSmoother(tryer, WithTimeout(tt.duration))
+			smoother, err := NewRateSmoother(tryer, WithTimeout(tt.duration))
+			require.NoError(t, err)
 
 			start := time.Now()
 			successfulCalls := 0
@@ -173,11 +176,12 @@ func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTe
 	t.Parallel()
 
 	tryer := tryerGetter(1)
-	smoother := NewRateSmoother(tryer) // 1 RPS for easy timing
+	smoother, err := NewRateSmoother(tryer) // 1 RPS for easy timing
+	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// First take should succeed immediately
-	_, err := smoother.Take(ctx, 1)
+	_, err = smoother.Take(ctx, 1)
 	require.NoError(t, err, "name: %s", t.Name())
 
 	// Start a goroutine that will cancel the context shortly
@@ -224,7 +228,6 @@ func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer)
 	var (
 		ctx       = context.Background()
 		rateTryer = tryerGetter(rps)
-		smoother  = NewRateSmoother(rateTryer)
 
 		start              = time.Now()
 		wg                 sync.WaitGroup
@@ -232,6 +235,9 @@ func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer)
 		minDelay, maxDelay time.Duration
 		muDelay            sync.Mutex
 	)
+
+	smoother, err := NewRateSmoother(rateTryer)
+	require.NoError(t, err)
 
 	for range goroutines {
 		wg.Add(1)
