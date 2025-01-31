@@ -110,7 +110,7 @@ func New(healthCheckFunc OperationFunc, opts ...Option) (*Breaker, error) {
 		return nil, ErrInvalidJitter
 	}
 
-	if cb.healthCheckMaxDuration >= cb.healthCheckInterval {
+	if cb.healthCheckMaxDuration > 0 && cb.healthCheckMaxDuration >= cb.healthCheckInterval {
 		return nil, ErrInvalidHealthCheck
 	}
 
