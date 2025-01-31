@@ -58,7 +58,7 @@ func WithStateChangeFunc(stateChangeFunc StateChangeFunc) Option {
 // RunOption defines optional parameters for Run.
 type RunOption func(*runOptions)
 
-// WithRunPrimaryTimeout sets the timeout for the main operation.
+// WithRunPrimaryTimeout sets the timeout for the primary operation.
 // Default: not set.
 func WithRunPrimaryTimeout(timeout time.Duration) RunOption {
 	return func(opts *runOptions) {

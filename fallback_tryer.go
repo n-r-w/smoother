@@ -38,12 +38,12 @@ func WithFallbackTryerBreakerRunOptions(options ...breaker.RunOption) FallbackTr
 	}
 }
 
-// FallbackTryer implements a rate limiter that uses one main Tryer and one fallback Tryer.
-// If the main Tryer fails, it uses the fallback Tryer using circuit breaker pattern.
+// FallbackTryer implements a rate limiter that uses one primary Tryer and one fallback Tryer.
+// If the primary Tryer fails, it uses the fallback Tryer using circuit breaker pattern.
 type FallbackTryer struct {
 	breaker *breaker.Breaker
 
-	main     Tryer
+	primary  Tryer
 	fallback Tryer
 
 	breakerOptions    []breaker.Option
@@ -55,16 +55,16 @@ type FallbackTryer struct {
 var _ Tryer = (*FallbackTryer)(nil)
 
 // NewFallbackTryer creates a new FallbackTryer instance.
-func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) (*FallbackTryer, error) {
-	if main == nil {
-		return nil, fmt.Errorf("NewFallbackTryer: nil main tryer")
+func NewFallbackTryer(primary, fallback Tryer, opts ...FallbackTryerOption) (*FallbackTryer, error) {
+	if primary == nil {
+		return nil, fmt.Errorf("NewFallbackTryer: nil primary tryer")
 	}
 	if fallback == nil {
 		return nil, fmt.Errorf("NewFallbackTryer: nil fallback tryer")
 	}
 
 	f := &FallbackTryer{
-		main:     main,
+		primary:  primary,
 		fallback: fallback,
 	}
 
@@ -77,7 +77,7 @@ func NewFallbackTryer(main, fallback Tryer, opts ...FallbackTryerOption) (*Fallb
 	}
 
 	br, err := breaker.New(func(ctx context.Context) error {
-		if _, _, err := main.TryTake(ctx, 1); err != nil {
+		if _, _, err := primary.TryTake(ctx, 1); err != nil {
 			return fmt.Errorf("NewFallbackTryer: %w", err)
 		}
 		return nil
@@ -103,13 +103,13 @@ func (f *FallbackTryer) Stop() error {
 // TryTake attempts to take n requests.
 func (f *FallbackTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
 	var (
-		start                        = time.Now()
-		allowedMain, allowedFallback bool
+		start                           = time.Now()
+		allowedPrimary, allowedFallback bool
 	)
 
-	mainFunc := func(ctx context.Context) error {
+	primaryFunc := func(ctx context.Context) error {
 		var err error
-		allowedMain, _, err = f.main.TryTake(ctx, count)
+		allowedPrimary, _, err = f.primary.TryTake(ctx, count)
 		return err
 	}
 
@@ -119,7 +119,7 @@ func (f *FallbackTryer) TryTake(ctx context.Context, count int) (bool, time.Dura
 		return err
 	}
 
-	opType, err := f.breaker.Run(ctx, mainFunc, fallbackFunc, f.breakerRunOptions...)
+	opType, err := f.breaker.Run(ctx, primaryFunc, fallbackFunc, f.breakerRunOptions...)
 	if err != nil {
 		if f.errorFunc != nil {
 			f.errorFunc(ctx, err)
@@ -128,7 +128,7 @@ func (f *FallbackTryer) TryTake(ctx context.Context, count int) (bool, time.Dura
 		return false, time.Since(start), err
 	}
 
-	return lo.Ternary(opType == breaker.OperationPrimary, allowedMain, allowedFallback), time.Since(start), nil
+	return lo.Ternary(opType == breaker.OperationPrimary, allowedPrimary, allowedFallback), time.Since(start), nil
 }
 
 // GetState returns the current state of the circuit breaker.
