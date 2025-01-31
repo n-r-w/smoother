@@ -16,12 +16,12 @@ import (
 
 func main() {
 	const (
-		rps         = 10000
+		rps         = 500
 		clientCount = 10
 		// redis_rate or throttled limiter
 		useRedisRate = true
 		// use miniredis or redis cluster
-		fakeRedis = false
+		fakeRedis = true
 		// request to tryer timeout
 		requestTimeout = time.Millisecond * 500
 
@@ -34,10 +34,10 @@ func main() {
 		breakerHealthCheckInterval = time.Second * 5
 		// maximum duration of a health check
 		breakerHealthCheckMaxDuration = time.Millisecond * 500
-		// maximum duration of a main run function
-		mainRunFallbackTimeout = time.Millisecond * 500
+		// maximum duration of a primary run function
+		runPrimaryTimeout = time.Millisecond * 100
 		// maximum duration of a fallback run function
-		fallbackRunFallbackTimeout = time.Millisecond * 500
+		runFallbackTimeout = time.Millisecond * 100
 	)
 
 	var client redis.UniversalClient
@@ -105,8 +105,8 @@ func main() {
 			),
 		),
 		smoother.WithFallbackTryerBreakerRunOptions(
-			breaker.WithRunFallbackTimeout(mainRunFallbackTimeout),
-			breaker.WithRunFallbackTimeout(fallbackRunFallbackTimeout),
+			breaker.WithRunPrimaryTimeout(runPrimaryTimeout),
+			breaker.WithRunFallbackTimeout(runFallbackTimeout),
 		),
 	); err != nil {
 		log.Fatal(err)
