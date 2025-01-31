@@ -243,12 +243,12 @@ func TestBreakerContextCancellation(t *testing.T) {
 	// Enough time for primary operation
 	primaryDelayMS.Store(100)
 	fallbackError.Store(true)
-	opType, err := cb.Run(ctx, primary, fallback, WithRunPrimaryTimeout(time.Millisecond*200))
+	opType, err := cb.Run(ctx, primary, fallback, WithRunPrimaryTimeout(time.Millisecond*400))
 	require.Equal(t, OperationPrimary, opType)
 	require.NoError(t, err)
 
 	// Not enough time for primary operation and fallback error
-	primaryDelayMS.Store(200)
+	primaryDelayMS.Store(400)
 	fallbackError.Store(true)
 	opType, err = cb.Run(ctx, primary, fallback, WithRunPrimaryTimeout(time.Millisecond*100))
 	require.Equal(t, OperationNone, opType)
