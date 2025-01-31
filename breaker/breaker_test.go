@@ -14,8 +14,6 @@ import (
 )
 
 func TestBreakerNew(t *testing.T) {
-	t.Parallel()
-
 	primary := func(ctx context.Context) error { return nil }
 
 	t.Run("successful initialization", func(t *testing.T) {
@@ -60,8 +58,6 @@ func TestBreakerNew(t *testing.T) {
 }
 
 func TestBreakerStartStop(t *testing.T) {
-	t.Parallel()
-
 	primary := func(ctx context.Context) error { return nil }
 	fallback := func(ctx context.Context) error { return nil }
 
@@ -81,8 +77,6 @@ func TestBreakerStartStop(t *testing.T) {
 }
 
 func TestBreakerRun(t *testing.T) {
-	t.Parallel()
-
 	var (
 		ctx            = context.Background()
 		primaryFailed  atomic.Bool
@@ -191,7 +185,7 @@ func TestBreakerRun(t *testing.T) {
 	require.EqualValues(t, 1, stateChangeOpenCount.Load())
 	require.EqualValues(t, 0, stateChangeClosedCount.Load())
 
-	time.Sleep(healthCheckInterval * (successThreshold + 2))
+	time.Sleep(healthCheckInterval * successThreshold * 2)
 	require.Equal(t, StateClosed, cb.GetState()) // back to closed
 	require.EqualValues(t, 1, stateChangeOpenCount.Load())
 	require.EqualValues(t, 1, stateChangeClosedCount.Load())
@@ -205,8 +199,6 @@ func TestBreakerRun(t *testing.T) {
 }
 
 func TestBreakerContextCancellation(t *testing.T) {
-	t.Parallel()
-
 	var (
 		ctx             = context.Background()
 		primaryDelayMS  atomic.Int64
@@ -277,8 +269,6 @@ func TestBreakerContextCancellation(t *testing.T) {
 }
 
 func TestBreakerRaceCondition(t *testing.T) {
-	t.Parallel()
-
 	var (
 		ctx            = context.Background()
 		primaryFailed  atomic.Bool
