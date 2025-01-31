@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/n-r-w/smoother"
+	"github.com/n-r-w/smoother/breaker"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -15,15 +16,28 @@ import (
 
 func main() {
 	const (
-		rps            = 500
-		clientCount    = 10
-		useRedisRate   = true                   // redis_rate or throttled limiter
-		fakeRedis      = true                   // use miniredis or redis cluster
-		requestTimeout = time.Millisecond * 500 // request to tryer timeout
-		// circuit breaker
-		breakerErrorThreshold   = 1
+		rps         = 500
+		clientCount = 10
+		// redis_rate or throttled limiter
+		useRedisRate = true
+		// use miniredis or redis cluster
+		fakeRedis = true
+		// request to tryer timeout
+		requestTimeout = time.Millisecond * 500
+
+		// number of errors before the circuit breaker opens
+		breakerErrorThreshold = 1
+		// number of successes before the circuit breaker closes
 		breakerSuccessThreshold = 3
-		breakerTimeout          = time.Second * 3
+		// interval between health checks.
+		// transition to closed state after breakerSuccessThreshold*breakerHealthCheckInterval
+		breakerHealthCheckInterval = time.Second * 5
+		// maximum duration of a health check
+		breakerHealthCheckMaxDuration = time.Millisecond * 500
+		// maximum duration of a primary run function
+		runPrimaryTimeout = time.Millisecond * 100
+		// maximum duration of a fallback run function
+		runFallbackTimeout = time.Millisecond * 100
 	)
 
 	var client redis.UniversalClient
@@ -76,22 +90,40 @@ func main() {
 	}
 
 	// Add circuit breaker with inmemory fallback
-	tryer, err = smoother.NewFallbackTryer(tryer, localTryer,
-		smoother.WithFallbackTryerErrorThreshold(breakerErrorThreshold),
-		smoother.WithFallbackTryerSuccessThreshold(breakerSuccessThreshold),
-		smoother.WithFallbackTryerTimeout(breakerTimeout),
-		smoother.WithFallbackTryerStatusChangedFunc(
-			func(_ context.Context, status smoother.FallbackTryerStatus) {
-				fmt.Printf("FallbackTryer status changed: %s\n", status)
-			}),
-	)
-	if err != nil {
+	var fallbackTryer *smoother.FallbackTryer
+	if fallbackTryer, err = smoother.NewFallbackTryer(tryer, localTryer,
+		smoother.WithFallbackTryerBreakerOptions(
+			breaker.WithErrorThreshold(breakerErrorThreshold),
+			breaker.WithSuccessThreshold(breakerSuccessThreshold),
+			breaker.WithHealthCheckInterval(breakerHealthCheckInterval),
+			breaker.WithHealthCheckMaxDuration(breakerHealthCheckMaxDuration),
+			breaker.WithJitterMaxPerc(0.1), //nolint:mnd // jitter 10%
+			breaker.WithStateChangeFunc(
+				func(_ context.Context, state breaker.State) {
+					fmt.Printf("Circuit breaker state changed: %s\n", state)
+				},
+			),
+		),
+		smoother.WithFallbackTryerBreakerRunOptions(
+			breaker.WithRunPrimaryTimeout(runPrimaryTimeout),
+			breaker.WithRunFallbackTimeout(runFallbackTimeout),
+		),
+	); err != nil {
 		log.Fatal(err)
 	}
 
-	sm, err := smoother.NewRateSmoother(tryer, smoother.WithTimeout(requestTimeout))
-	if err != nil {
+	if err = fallbackTryer.Start(context.Background()); err != nil {
 		log.Fatal(err)
+	}
+	defer func() {
+		if err := fallbackTryer.Stop(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	sm, err := smoother.NewRateSmoother(fallbackTryer, smoother.WithTimeout(requestTimeout))
+	if err != nil {
+		log.Fatal(err) //nolint:gocritic // ok
 	}
 
 	// generate rps

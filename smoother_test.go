@@ -64,8 +64,6 @@ func setupTestLocalTryer(t *testing.T) getTestTryer {
 }
 
 func TestRateSmoother_Take(t *testing.T) {
-	t.Parallel()
-
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_Take_helper(t, setupTestLocalTryer(t))
 	})
@@ -78,8 +76,6 @@ func TestRateSmoother_Take(t *testing.T) {
 }
 
 func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
-	t.Parallel()
-
 	ctx := context.Background()
 	name := fmt.Sprintf(" (%s)", t.Name())
 
@@ -159,8 +155,6 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 }
 
 func TestRateSmoother_ContextCancellation(t *testing.T) {
-	t.Parallel()
-
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_ContextCancellation_Helper(t, setupTestLocalTryer(t))
 	})
@@ -173,8 +167,6 @@ func TestRateSmoother_ContextCancellation(t *testing.T) {
 }
 
 func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTestTryer) {
-	t.Parallel()
-
 	tryer := tryerGetter(1)
 	smoother, err := NewRateSmoother(tryer) // 1 RPS for easy timing
 	require.NoError(t, err)
@@ -202,8 +194,6 @@ func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTe
 }
 
 func TestRateSmoother_Concurrency(t *testing.T) {
-	t.Parallel()
-
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_Concurrency_Helper(t, setupTestLocalTryer(t))
 	})
@@ -216,8 +206,6 @@ func TestRateSmoother_Concurrency(t *testing.T) {
 }
 
 func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer) {
-	t.Parallel()
-
 	const (
 		multi      = 5
 		rps        = 1000
