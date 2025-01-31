@@ -34,7 +34,7 @@ go get github.com/n-r-w/smoother
 - [Redis Rate](https://github.com/go-redis/redis_rate)
 - [Throttled with Redis backend](https://github.com/throttled/throttled)
 - [In-memory](./local_tryer.go)
-- [Main + fallback + circuit breaker](./fallback_tryer.go). For example, to use Redis Rate as the main Tryer and In-memory as the fallback.
+- [Primary + fallback + circuit breaker](./fallback_tryer.go). For example, to use Redis Rate as the primary Tryer and In-memory as the fallback.
 
 ## Usage
 
