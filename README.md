@@ -20,8 +20,15 @@ Smoother is a Go package that provides traffic smoothing capabilities by introdu
 - No dropped connections or rejected requests
 - Consistent, predictable throughput
 - Better resource utilization through traffic smoothing
-- Ideal for scenarios where request completion is more important than immediate response
+- Ideal for scenarios where request completion is more important than immediate error response
 - Suitable for both single-instance and distributed systems
+
+## Special features of the implementation [Primary + fallback + circuit breaker](./fallback_tryer.go)
+
+This type of implementation is designed for read-only traffic, since it switches between primary and fallback Tryer simultaneously sending requests to both.
+In close state, it selects primary if it's successful and fallback in case of failure.
+This means that in close state traffic will be handled by both implementations simultaneously.
+The removal of traffic from primary is only done when the circuit breaker is opened.
 
 ## Installation
 
