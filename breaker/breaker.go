@@ -64,6 +64,7 @@ const (
 // Breaker implements a circuit breaker pattern that switches between
 // primary and fallback operations based on failure rates and health checks.
 type Breaker struct {
+	needRecover     bool
 	stateChangeFunc StateChangeFunc
 
 	errorThreshold   int
@@ -143,13 +144,27 @@ func (cb *Breaker) Stop() error {
 }
 
 // Run executes either the primary or fallback operation based on the current state.
-func (cb *Breaker) Run(ctx context.Context, primary, fallback OperationFunc, opts ...RunOption) (OperationType, error) {
+func (cb *Breaker) Run( //nolint:gocognit // ok
+	ctx context.Context, primary, fallback OperationFunc, opts ...RunOption,
+) (resOt OperationType, resErr error) {
 	if cb.stopped.Load() {
 		return OperationNone, ErrBreakerStopped
 	}
 
 	if primary == nil || fallback == nil {
 		return OperationNone, ErrNilOperations
+	}
+
+	var primaryPanic, fallbackPanic any
+	if !cb.needRecover {
+		defer func() {
+			if primaryPanic != nil {
+				panic(primaryPanic)
+			}
+			if fallbackPanic != nil {
+				panic(fallbackPanic)
+			}
+		}()
 	}
 
 	var runOpts runOptions
@@ -190,6 +205,7 @@ func (cb *Breaker) Run(ctx context.Context, primary, fallback OperationFunc, opt
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
+					primaryPanic = r
 					primaryErr = fmt.Errorf("panic in primary: %v", r)
 				}
 				close(primaryStoppedCh)
@@ -202,6 +218,7 @@ func (cb *Breaker) Run(ctx context.Context, primary, fallback OperationFunc, opt
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
+					fallbackPanic = r
 					fallbackErr = fmt.Errorf("panic in fallback: %v", r)
 				}
 				close(fallbackStoppedCh)
@@ -232,6 +249,14 @@ func (cb *Breaker) Run(ctx context.Context, primary, fallback OperationFunc, opt
 
 		return OperationPrimary, nil
 	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			fallbackPanic = r
+			resOt = OperationNone
+			resErr = fmt.Errorf("panic in fallback: %v", r)
+		}
+	}()
 
 	// In open state, use fallback
 	if err := fallback(fallbackCtx); err != nil {
