@@ -55,6 +55,13 @@ func WithStateChangeFunc(stateChangeFunc StateChangeFunc) Option {
 	}
 }
 
+// WithRecover recover panic in primary and fallback operations.
+func WithRecover(b bool) Option {
+	return func(cb *Breaker) {
+		cb.needRecover = b
+	}
+}
+
 // RunOption defines optional parameters for Run.
 type RunOption func(*runOptions)
 

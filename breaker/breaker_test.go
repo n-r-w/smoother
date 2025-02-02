@@ -268,6 +268,120 @@ func TestBreakerContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBreakerPanicHandling(t *testing.T) {
+	ctx := context.Background()
+
+	primary := func(ctx context.Context) error { return nil }
+	fallback := func(ctx context.Context) error { return nil }
+	panicPrimary := func(ctx context.Context) error { panic("primary panic") }
+	panicFallback := func(ctx context.Context) error { panic("fallback panic") }
+
+	t.Run("panic in primary with recovery enabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(true),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		opType, err := cb.Run(ctx, panicPrimary, fallback)
+		require.NoError(t, err)
+		require.Equal(t, OperationFallback, opType)
+		require.Equal(t, StateOpen, cb.GetState())
+	})
+
+	t.Run("panic in fallback with recovery enabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(true),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		opType, err := cb.Run(ctx, primary, panicFallback)
+		require.NoError(t, err)
+		require.Equal(t, OperationPrimary, opType)
+		require.Equal(t, StateClosed, cb.GetState())
+	})
+
+	t.Run("panic in primary and fallback with recovery enabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(true),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		opType, err := cb.Run(ctx, primary, panicFallback)
+		require.NoError(t, err)
+		require.Equal(t, OperationPrimary, opType)
+		require.Equal(t, StateClosed, cb.GetState())
+	})
+
+	t.Run("panic in primary with recovery disabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(false),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		require.Panics(t, func() {
+			_, _ = cb.Run(ctx, panicPrimary, fallback)
+		})
+	})
+
+	t.Run("panic in fallback with recovery disabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(false),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		require.Panics(t, func() {
+			_, _ = cb.Run(ctx, primary, panicFallback)
+		})
+	})
+
+	t.Run("panic in primary and fallback with recovery disabled", func(t *testing.T) {
+		cb, err := New(
+			primary,
+			WithRecover(false),
+			WithErrorThreshold(1),
+		)
+		require.NoError(t, err)
+		require.NoError(t, cb.Start(ctx))
+		defer func() {
+			require.NoError(t, cb.Stop())
+		}()
+
+		require.Panics(t, func() {
+			_, _ = cb.Run(ctx, panicPrimary, panicFallback)
+		})
+	})
+}
+
 func TestBreakerRaceCondition(t *testing.T) {
 	var (
 		ctx            = context.Background()
