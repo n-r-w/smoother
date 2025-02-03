@@ -25,10 +25,10 @@ Smoother is a Go package that provides traffic smoothing capabilities by introdu
 
 ## Special features of the implementation [Primary + fallback + circuit breaker](./fallback_tryer.go)
 
-This type of implementation is designed for read-only traffic, since it switches between primary and fallback Tryer simultaneously sending requests to both.
-In close state, it selects primary if it's successful and fallback in case of failure.
-This means that in close state traffic will be handled by both implementations simultaneously.
-The removal of traffic from primary is only done when the circuit breaker is opened.
+In the FallbackTryer, requests are sent concurrently to both the primary and fallback.
+When in the closed state, it chooses the primary if it succeeds, and falls back if it fails.
+Consequently, both implementations handle traffic simultaneously.
+Traffic is only removed from the primary when the circuit breaker opens
 
 ## Installation
 
