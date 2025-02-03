@@ -330,7 +330,6 @@ func (cb *Breaker) startHealthCheck(ctx context.Context) { //nolint:gocognit // 
 					}
 				} else {
 					cb.successCount.Store(0)
-					timer.Reset(cb.healthCheckInterval + jitter)
 				}
 
 				if cancel != nil {
