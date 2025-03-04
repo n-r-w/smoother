@@ -294,10 +294,8 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 	smoother, err := NewRateSmoother(tryer, WithQueueSize(10))
 	require.NoError(t, err)
 
-	// Start the smoother
 	smoother.Start()
 
-	// Create a context with timeout for all operations
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -305,18 +303,18 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 	_, err = smoother.Take(ctx, 1)
 	require.NoError(t, err)
 
-	// Create a WaitGroup to track our goroutines
 	var wg sync.WaitGroup
-
-	// Track errors from all goroutines
 	var results []error
 	var resultsMu sync.Mutex
+	var requestsStarted sync.WaitGroup
 
 	// Launch 5 concurrent requests that will be queued
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
+		requestsStarted.Add(1)
 		go func() {
 			defer wg.Done()
+			requestsStarted.Done() // Сигнализируем, что горутина запущена
 
 			// This call will be queued and then interrupted by shutdown
 			_, err := smoother.Take(ctx, 1)
@@ -327,16 +325,14 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		}()
 	}
 
-	// Give some time for requests to be queued (but not processed)
-	time.Sleep(50 * time.Millisecond)
+	// Ждем, пока все горутины точно запустятся
+	requestsStarted.Wait()
+	// Даем дополнительное время для гарантированного попадания в очередь
+	time.Sleep(100 * time.Millisecond)
 
-	// Stop the smoother - this should trigger the drain code path we want to test
 	smoother.Stop()
-
-	// Wait for all goroutines to finish
 	wg.Wait()
 
-	// Check that at least some requests got the shutdown error
 	shutdownErrors := 0
 	for _, err := range results {
 		if err != nil && err.Error() == "rate smoother shutting down" {
@@ -344,7 +340,6 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		}
 	}
 
-	// We should have at least one shutdown error
 	assert.Greater(t, shutdownErrors, 0, "Expected at least one 'rate smoother shutting down' error")
 }
 
