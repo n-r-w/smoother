@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -126,6 +127,9 @@ func main() {
 		log.Fatal(err) //nolint:gocritic // ok
 	}
 
+	sm.Start()
+	defer sm.Stop()
+
 	// generate rps
 	generateRPS(sm, clientCount)
 
@@ -152,10 +156,16 @@ func generateRPS(smoother *smoother.RateSmoother, clientCount int) {
 		}
 	}()
 
-	for i := 0; i < clientCount; i++ {
+	for range clientCount {
 		go func() {
 			for {
-				_, err := smoother.Take(ctx, 1)
+				ctxTry := ctx
+				// imitation of context cancellation for some requests
+				if rand.Intn(100) < 10 { //nolint:gosec,mnd //ok
+					ctxTry, _ = context.WithTimeout(ctx, time.Millisecond)
+				}
+
+				_, err := smoother.Take(ctxTry, 1)
 				if err != nil {
 					errorCount.Add(1)
 				} else {

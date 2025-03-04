@@ -3,6 +3,7 @@ package smoother
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -127,12 +128,14 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 			tryer := tryerGetter(tt.rps)
 			smoother, err := NewRateSmoother(tryer, WithTimeout(tt.duration))
 			require.NoError(t, err)
+			smoother.Start()
+			defer smoother.Stop()
 
 			start := time.Now()
 			successfulCalls := 0
 
 			// Send requests faster than the rate limit
-			for i := 0; i < tt.calls/tt.count; i++ {
+			for range tt.calls / tt.count {
 				_, err := smoother.Take(ctx, tt.count)
 				require.NoError(t, err)
 
@@ -170,6 +173,8 @@ func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTe
 	tryer := tryerGetter(1)
 	smoother, err := NewRateSmoother(tryer) // 1 RPS for easy timing
 	require.NoError(t, err)
+	smoother.Start()
+	defer smoother.Stop()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// First take should succeed immediately
@@ -226,6 +231,8 @@ func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer)
 
 	smoother, err := NewRateSmoother(rateTryer)
 	require.NoError(t, err)
+	smoother.Start()
+	defer smoother.Stop()
 
 	for range goroutines {
 		wg.Add(1)
@@ -267,4 +274,109 @@ func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer)
 	assert.InDelta(t, expectedRate, actualRate, expectedRate*marginOfError,
 		"MinDelay: %s, MaxDelay: %s, Expected rate: %.2f, Actual rate: %.2f (margin: ±%.0f%%). Name: %s",
 		minDelay, maxDelay, expectedRate, actualRate, marginOfError*100, t.Name())
+}
+
+func TestRateSmoother_ShutdownWithPendingRequests(t *testing.T) {
+	t.Run("local", func(t *testing.T) {
+		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupTestLocalTryer(t))
+	})
+	t.Run("redis_throttled", func(t *testing.T) {
+		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupThrottledTryer(t))
+	})
+	t.Run("redis_rate", func(t *testing.T) {
+		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupRedisRateTryer(t))
+	})
+}
+
+func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGetter getTestTryer) {
+	// Create a smoother with a very low rate to ensure requests will queue up
+	tryer := tryerGetter(1) // 1 RPS to ensure requests will be queued
+	smoother, err := NewRateSmoother(tryer, WithQueueSize(10))
+	require.NoError(t, err)
+
+	smoother.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Take a token to ensure the first request doesn't stay in the queue
+	_, err = smoother.Take(ctx, 1)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	var results []error
+	var resultsMu sync.Mutex
+	var requestsStarted sync.WaitGroup
+
+	// Launch 5 concurrent requests that will be queued
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		requestsStarted.Add(1)
+		go func() {
+			defer wg.Done()
+			requestsStarted.Done() // Сигнализируем, что горутина запущена
+
+			// This call will be queued and then interrupted by shutdown
+			_, err := smoother.Take(ctx, 1)
+
+			resultsMu.Lock()
+			results = append(results, err)
+			resultsMu.Unlock()
+		}()
+	}
+
+	// Ждем, пока все горутины точно запустятся
+	requestsStarted.Wait()
+	// Даем дополнительное время для гарантированного попадания в очередь
+	time.Sleep(100 * time.Millisecond)
+
+	smoother.Stop()
+	wg.Wait()
+
+	shutdownErrors := 0
+	for _, err := range results {
+		if err != nil && err.Error() == "rate smoother shutting down" {
+			shutdownErrors++
+		}
+	}
+
+	assert.Greater(t, shutdownErrors, 0, "Expected at least one 'rate smoother shutting down' error")
+}
+
+func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
+	// Create a custom error to check for wrapping
+	customErr := errors.New("test tryer error")
+
+	// Create a mock tryer that returns an error
+	mockTryer := &mockTryer{
+		tryTakeFunc: func(ctx context.Context, count int) (bool, time.Duration, error) {
+			return false, 0, customErr
+		},
+	}
+
+	smoother, err := NewRateSmoother(mockTryer)
+	require.NoError(t, err)
+	smoother.Start()
+	defer smoother.Stop()
+
+	// Make the Take call - this should propagate our custom error
+	waitDuration, takeErr := smoother.Take(context.Background(), 1)
+
+	// Verify the error was properly wrapped
+	assert.Error(t, takeErr)
+	assert.ErrorContains(t, takeErr, "tryer:")
+	assert.ErrorIs(t, takeErr, customErr)
+	assert.Greater(t, waitDuration, time.Duration(0))
+}
+
+// Mock implementation for testing
+type mockTryer struct {
+	tryTakeFunc func(ctx context.Context, count int) (bool, time.Duration, error)
+}
+
+func (m *mockTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+	if m.tryTakeFunc != nil {
+		return m.tryTakeFunc(ctx, count)
+	}
+	return true, 0, nil
 }
