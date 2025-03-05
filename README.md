@@ -14,6 +14,7 @@ Smoother is a Go package that provides traffic smoothing capabilities by introdu
 - 📡 Supports both local and distributed (Redis-based) implementations
 - 🛠️ Pluggable interface for custom implementations
 - 🔌 Thread-safe operation
+- 🚦 Throttler package for back pressure pattern
 
 ## Key Benefits
 
@@ -46,3 +47,7 @@ go get github.com/n-r-w/smoother
 ## Usage
 
 See the [example](./example/main.go) for usage examples.
+
+## Throttler package
+
+The [throttler](./throttler/throttler.go) package provides a simple implementation of the back pressure pattern.
