@@ -10,37 +10,44 @@ import (
 
 	"github.com/n-r-w/smoother"
 	"github.com/n-r-w/smoother/breaker"
+	"github.com/n-r-w/smoother/throttler"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	rps         = 500
+	clientCount = 6
+	// redis_rate or throttled limiter
+	useRedisRate = true
+	// use miniredis or redis cluster
+	fakeRedis = true
+	// request to tryer timeout
+	requestTimeout = time.Millisecond * 500
+
+	// number of errors before the circuit breaker opens
+	breakerErrorThreshold = 1
+	// number of successes before the circuit breaker closes
+	breakerSuccessThreshold = 3
+	// interval between health checks.
+	// transition to closed state after breakerSuccessThreshold*breakerHealthCheckInterval
+	breakerHealthCheckInterval = time.Second * 5
+	// maximum duration of a health check
+	breakerHealthCheckMaxDuration = time.Millisecond * 500
+	// maximum duration of a primary run function
+	runPrimaryTimeout = time.Millisecond * 100
+	// maximum duration of a fallback run function
+	runFallbackTimeout = time.Millisecond * 100
+
+	// error rate
+	errorRate = 0
+
+	// throttler max concurrency
+	throttlerMaxConcurrency = 1
+)
+
 func main() {
-	const (
-		rps         = 500
-		clientCount = 10
-		// redis_rate or throttled limiter
-		useRedisRate = true
-		// use miniredis or redis cluster
-		fakeRedis = true
-		// request to tryer timeout
-		requestTimeout = time.Millisecond * 500
-
-		// number of errors before the circuit breaker opens
-		breakerErrorThreshold = 1
-		// number of successes before the circuit breaker closes
-		breakerSuccessThreshold = 3
-		// interval between health checks.
-		// transition to closed state after breakerSuccessThreshold*breakerHealthCheckInterval
-		breakerHealthCheckInterval = time.Second * 5
-		// maximum duration of a health check
-		breakerHealthCheckMaxDuration = time.Millisecond * 500
-		// maximum duration of a primary run function
-		runPrimaryTimeout = time.Millisecond * 100
-		// maximum duration of a fallback run function
-		runFallbackTimeout = time.Millisecond * 100
-	)
-
 	var client redis.UniversalClient
 	if fakeRedis {
 		mr, err := miniredis.Run()
@@ -130,13 +137,18 @@ func main() {
 	sm.Start()
 	defer sm.Stop()
 
+	th, err := throttler.New(throttlerMaxConcurrency, throttler.WithTimeout(requestTimeout))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// generate rps
-	generateRPS(sm, clientCount)
+	generateRPS(sm, th, clientCount)
 
 	time.Sleep(time.Hour)
 }
 
-func generateRPS(smoother *smoother.RateSmoother, clientCount int) {
+func generateRPS(smoother *smoother.RateSmoother, th *throttler.Throttler, clientCount int) {
 	var (
 		successCount atomic.Int64
 		errorCount   atomic.Int64
@@ -161,11 +173,14 @@ func generateRPS(smoother *smoother.RateSmoother, clientCount int) {
 			for {
 				ctxTry := ctx
 				// imitation of context cancellation for some requests
-				if rand.Intn(100) < 10 { //nolint:gosec,mnd //ok
+				if rand.Float64() < errorRate { //nolint:gosec,mnd //ok
 					ctxTry, _ = context.WithTimeout(ctx, time.Millisecond)
 				}
 
-				_, err := smoother.Take(ctxTry, 1)
+				err := th.Execute(ctxTry, func(ctx context.Context) error {
+					_, err := smoother.Take(ctx, 1)
+					return err
+				})
 				if err != nil {
 					errorCount.Add(1)
 				} else {
