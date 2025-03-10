@@ -1,12 +1,11 @@
 module github.com/n-r-w/smoother
 
 go 1.23
-
 require (
 	github.com/redis/go-redis/v9 v9.7.1
 	github.com/samber/lo v1.49.1
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.12.0
 )
 
 require (
