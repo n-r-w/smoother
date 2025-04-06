@@ -3,6 +3,7 @@ package smoother
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
@@ -15,16 +16,17 @@ type RedisRateTryerOption func(*RedisRateTryer)
 // WithRedisRateTryerBurstFromRPSFunc sets the burst from rps function.
 func WithRedisRateTryerBurstFromRPSFunc(burstFromRPSFunc BurstFromRPSFunc) RedisRateTryerOption {
 	return func(t *RedisRateTryer) {
-		t.burstFromRPSFunc = burstFromRPSFunc
+		t.burstFromRPSFunc.Store(burstFromRPSFunc)
 	}
 }
 
 // RedisRateTryer implements a rate limiter using Redis and Redis Rate.
 type RedisRateTryer struct {
 	redisLimiter     *redis_rate.Limiter
-	limit            redis_rate.Limit
 	key              string
-	burstFromRPSFunc BurstFromRPSFunc
+	rps              atomic.Int64 // atomic RPS value
+	burst            atomic.Int64 // atomic burst value
+	burstFromRPSFunc atomic.Value // stores BurstFromRPSFunc
 }
 
 var _ Tryer = (*RedisRateTryer)(nil)
@@ -49,13 +51,14 @@ func NewRedisRateTryer(
 
 	t := &RedisRateTryer{
 		redisLimiter: redisLimiter,
-		limit: redis_rate.Limit{
-			Rate:   rps,
-			Period: time.Second,
-		},
-		key:              key,
-		burstFromRPSFunc: DefaultBurstFromRPS,
+		key:          key,
 	}
+
+	// Set initial RPS
+	t.rps.Store(int64(rps))
+
+	// Set default burst function
+	t.burstFromRPSFunc.Store(DefaultBurstFromRPS)
 
 	for _, opt := range opts {
 		opt(t)
@@ -65,7 +68,9 @@ func NewRedisRateTryer(
 		return nil, fmt.Errorf("NewRedisRateTryer: %w", err)
 	}
 
-	t.limit.Burst = t.burstFromRPSFunc(rps)
+	// Calculate initial burst value
+	burstFunc := t.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	t.burst.Store(int64(burstFunc(rps)))
 
 	return t, nil
 }
@@ -79,12 +84,23 @@ func (r *RedisRateTryer) validateOptions() error {
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
 func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+	// Get current RPS and burst values atomically
+	rps := r.rps.Load()
+	burst := r.burst.Load()
+
 	// Burst should be at least the number of requests, otherwise it will hang
-	limit := r.limit
-	minBurst := count + 1
-	if limit.Burst < minBurst {
-		limit.Burst = minBurst
+	minBurst := int64(count + 1)
+	if burst < minBurst {
+		burst = minBurst
 	}
+
+	// Create limit for this request
+	limit := redis_rate.Limit{
+		Rate:   int(rps),
+		Period: time.Second,
+		Burst:  int(burst),
+	}
+
 	res, err := r.redisLimiter.AllowN(ctx, r.key, limit, count)
 	if err != nil {
 		return false, 0, fmt.Errorf("redis: %w", err)
@@ -95,6 +111,58 @@ func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Dur
 	}
 
 	return false, res.RetryAfter, nil
+}
+
+// SetRPS updates the rate limit's requests per second.
+// This change will take effect on the next TryTake call.
+func (r *RedisRateTryer) SetRPS(rps int) error {
+	if rps <= 0 {
+		return fmt.Errorf("RedisRateTryer.SetRPS: invalid rps %d", rps)
+	}
+
+	// Update RPS atomically
+	r.rps.Store(int64(rps))
+
+	// Calculate and update burst atomically
+	burstFunc := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	r.burst.Store(int64(burstFunc(rps)))
+
+	return nil
+}
+
+// SetMultiplier updates the burst multiplier by updating the burst function.
+// This change will take effect on the next TryTake call.
+func (r *RedisRateTryer) SetMultiplier(multiplier float64) error {
+	if multiplier <= 0 {
+		return fmt.Errorf("RedisRateTryer.SetMultiplier: invalid multiplier %f", multiplier)
+	}
+
+	// Get the current burst function
+	currentBurstFunc := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+
+	// Create a new burst function that applies the multiplier
+	newFunc := func(rps int) int {
+		return int(float64(currentBurstFunc(rps)) * multiplier)
+	}
+
+	// Store the new function
+	r.burstFromRPSFunc.Store(newFunc)
+
+	// Update the burst value with the new function
+	currentRPS := int(r.rps.Load())
+	r.burst.Store(int64(newFunc(currentRPS)))
+
+	return nil
+}
+
+// GetRPS returns the current rate limit in requests per second.
+func (r *RedisRateTryer) GetRPS() int {
+	return int(r.rps.Load())
+}
+
+// GetBurst returns the current burst value.
+func (r *RedisRateTryer) GetBurst() int {
+	return int(r.burst.Load())
 }
 
 // Reset resets the Tryer to its initial state.
