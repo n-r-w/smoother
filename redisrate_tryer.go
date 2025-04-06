@@ -58,7 +58,9 @@ func NewRedisRateTryer(
 	t.rps.Store(int64(rps))
 
 	// Set default burst function
-	t.burstFromRPSFunc.Store(DefaultBurstFromRPS)
+	// Store the function with its concrete type to avoid type assertion issues
+	var defaultFunc BurstFromRPSFunc = DefaultBurstFromRPS
+	t.burstFromRPSFunc.Store(defaultFunc)
 
 	for _, opt := range opts {
 		opt(t)
@@ -69,7 +71,11 @@ func NewRedisRateTryer(
 	}
 
 	// Calculate initial burst value
-	burstFunc := t.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	// Safely retrieve the function with proper type assertion
+	burstFunc, ok := t.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	if !ok {
+		return nil, fmt.Errorf("NewRedisRateTryer: invalid burst function type")
+	}
 	t.burst.Store(int64(burstFunc(rps)))
 
 	return t, nil
@@ -124,7 +130,10 @@ func (r *RedisRateTryer) SetRPS(rps int) error {
 	r.rps.Store(int64(rps))
 
 	// Calculate and update burst atomically
-	burstFunc := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	burstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	if !ok {
+		return fmt.Errorf("RedisRateTryer.SetRPS: invalid burst function type")
+	}
 	r.burst.Store(int64(burstFunc(rps)))
 
 	return nil
@@ -138,7 +147,10 @@ func (r *RedisRateTryer) SetMultiplier(multiplier float64) error {
 	}
 
 	// Get the current burst function
-	currentBurstFunc := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	currentBurstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	if !ok {
+		return fmt.Errorf("RedisRateTryer.SetMultiplier: invalid burst function type")
+	}
 
 	// Create a new burst function that applies the multiplier
 	newFunc := func(rps int) int {

@@ -44,6 +44,8 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	require.NoError(t, client.Ping(context.Background()).Err())
 
 	tryerGetter := func(rps int) ITryer {
+		// Create RedisRateTryer without any custom options
+		// This will use the default BurstFromRPSFunc
 		tryer, err := NewRedisRateTryer(client, "test", rps)
 		require.NoError(t, err)
 		return tryer
