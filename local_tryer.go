@@ -23,11 +23,12 @@ func WithMultiplier(multiplier float64) LocalTryerOption {
 // LocalTryer implements a simple rate limiter.
 // It allows n requests per interval and return false if the request is not allowed.
 type LocalTryer struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	lastAllowed time.Time
 	minInterval time.Duration
 
 	multiplier float64
+	rps        int
 }
 
 var _ Tryer = (*LocalTryer)(nil)
@@ -50,7 +51,8 @@ func NewLocalTryer(rps int, opts ...LocalTryerOption) (*LocalTryer, error) {
 		return nil, fmt.Errorf("NewLocalTryer: multiplier must be positive %f", r.multiplier)
 	}
 
-	r.minInterval = time.Second * time.Duration(r.multiplier) / time.Duration(rps)
+	r.rps = rps
+	r.minInterval = r.calculateMinInterval(rps)
 
 	return r, nil
 }
@@ -91,5 +93,80 @@ func (r *LocalTryer) Reset() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lastAllowed = time.Time{}
+	return nil
+}
+
+// SetRateLimit updates the rate limit of the LocalTryer.
+// It takes a new RPS (requests per second) value and multiplier, then recalculates the minimum interval.
+// Returns an error if the new RPS or multiplier is invalid.
+func (r *LocalTryer) SetRateLimit(rps int, multiplier float64) error {
+	if rps <= 0 {
+		return fmt.Errorf("SetRateLimit: invalid rps %d", rps)
+	}
+
+	if multiplier <= 0 {
+		return fmt.Errorf("SetRateLimit: multiplier must be positive %f", multiplier)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rps = rps
+	r.multiplier = multiplier
+	r.minInterval = r.calculateMinInterval(rps)
+
+	return nil
+}
+
+// GetRateLimit returns the current rate limit in requests per second.
+func (r *LocalTryer) GetRateLimit() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	return r.rps
+}
+
+// GetMultiplier returns the current multiplier value.
+func (r *LocalTryer) GetMultiplier() float64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	
+	return r.multiplier
+}
+
+// calculateMinInterval calculates the minimum interval between requests based on RPS and multiplier.
+func (r *LocalTryer) calculateMinInterval(rps int) time.Duration {
+	return time.Second * time.Duration(r.multiplier) / time.Duration(rps)
+}
+
+// SetRPS updates only the RPS (requests per second) value of the LocalTryer.
+// Returns an error if the new RPS is invalid.
+func (r *LocalTryer) SetRPS(rps int) error {
+	if rps <= 0 {
+		return fmt.Errorf("SetRPS: invalid rps %d", rps)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rps = rps
+	r.minInterval = r.calculateMinInterval(rps)
+
+	return nil
+}
+
+// SetMultiplier updates only the multiplier value of the LocalTryer.
+// Returns an error if the new multiplier is invalid.
+func (r *LocalTryer) SetMultiplier(multiplier float64) error {
+	if multiplier <= 0 {
+		return fmt.Errorf("SetMultiplier: multiplier must be positive %f", multiplier)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.multiplier = multiplier
+	r.minInterval = r.calculateMinInterval(r.rps)
+
 	return nil
 }
