@@ -31,7 +31,7 @@ type RedisThrottledTryer struct {
 	burstFromRPSFunc BurstFromRPSFunc
 }
 
-var _ Tryer = (*RedisThrottledTryer)(nil)
+var _ ITryer = (*RedisThrottledTryer)(nil)
 
 // NewRedisThrottledTryer creates a new RedisThrottledTryer.
 func NewRedisThrottledTryer(

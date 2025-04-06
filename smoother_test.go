@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type getTestTryer func(rps int) Tryer
+type getTestTryer func(rps int) ITryer
 
 func setupThrottledTryer(t *testing.T) getTestTryer {
 	t.Helper()
@@ -25,7 +25,7 @@ func setupThrottledTryer(t *testing.T) getTestTryer {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	require.NoError(t, client.Ping(context.Background()).Err())
 
-	tryerGetter := func(rps int) Tryer {
+	tryerGetter := func(rps int) ITryer {
 		tryer, err := NewRedisThrottledTryer(
 			client, "test", rps)
 		require.NoError(t, err)
@@ -43,7 +43,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	require.NoError(t, client.Ping(context.Background()).Err())
 
-	tryerGetter := func(rps int) Tryer {
+	tryerGetter := func(rps int) ITryer {
 		tryer, err := NewRedisRateTryer(client, "test", rps)
 		require.NoError(t, err)
 		return tryer
@@ -55,7 +55,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 func setupTestLocalTryer(t *testing.T) getTestTryer {
 	t.Helper()
 
-	tryerGetter := func(rps int) Tryer {
+	tryerGetter := func(rps int) ITryer {
 		tryer, err := NewLocalTryer(rps)
 		require.NoError(t, err)
 		return tryer

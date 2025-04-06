@@ -36,7 +36,7 @@ func WithQueueSize(size int) Option {
 
 // RateSmoother implements a rate limiter that blocks to ensure that the time spent between multiple.
 type RateSmoother struct {
-	tryer   Tryer
+	tryer   ITryer
 	timeout time.Duration
 
 	queueSize    int
@@ -47,7 +47,7 @@ type RateSmoother struct {
 }
 
 // NewRateSmoother creates a new RateSmoother instance.
-func NewRateSmoother(tryer Tryer, opts ...Option) (*RateSmoother, error) {
+func NewRateSmoother(tryer ITryer, opts ...Option) (*RateSmoother, error) {
 	if tryer == nil {
 		return nil, fmt.Errorf("NewRateSmoother: nil tryer")
 	}

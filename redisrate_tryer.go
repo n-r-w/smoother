@@ -29,7 +29,7 @@ type RedisRateTryer struct {
 	burstFromRPSFunc atomic.Value // stores BurstFromRPSFunc
 }
 
-var _ Tryer = (*RedisRateTryer)(nil)
+var _ ITryer = (*RedisRateTryer)(nil)
 
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(

@@ -89,7 +89,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var tryer smoother.Tryer
+	var tryer smoother.ITryer
 
 	if useRedisRate {
 		tryer = redisRateTryer

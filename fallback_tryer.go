@@ -43,8 +43,8 @@ func WithFallbackTryerBreakerRunOptions(options ...breaker.RunOption) FallbackTr
 type FallbackTryer struct {
 	breaker *breaker.Breaker
 
-	primary  Tryer
-	fallback Tryer
+	primary  ITryer
+	fallback ITryer
 
 	breakerOptions    []breaker.Option
 	breakerRunOptions []breaker.RunOption
@@ -52,10 +52,10 @@ type FallbackTryer struct {
 	errorFunc FallbackTryerErrorFunc
 }
 
-var _ Tryer = (*FallbackTryer)(nil)
+var _ ITryer = (*FallbackTryer)(nil)
 
 // NewFallbackTryer creates a new FallbackTryer instance.
-func NewFallbackTryer(primary, fallback Tryer, opts ...FallbackTryerOption) (*FallbackTryer, error) {
+func NewFallbackTryer(primary, fallback ITryer, opts ...FallbackTryerOption) (*FallbackTryer, error) {
 	if primary == nil {
 		return nil, fmt.Errorf("NewFallbackTryer: nil primary tryer")
 	}
