@@ -147,12 +147,12 @@ func (r *RedisThrottledTryer) Reset() error {
 }
 
 // SetRate updates only the RPS (requests per second) value of the LocalTryer.
-func (r *RedisThrottledTryer) SetRate(rps int) error {
+func (r *RedisThrottledTryer) SetRate(_ int) error {
 	return fmt.Errorf("RedisThrottledTryer.SetRate: not supported")
 }
 
 // SetMultiplier updates only the multiplier value of the LocalTryer.
-func (r *RedisThrottledTryer) SetMultiplier(multiplier float64) error {
+func (r *RedisThrottledTryer) SetMultiplier(_ float64) error {
 	return fmt.Errorf("RedisThrottledTryer.SetMultiplier: not supported")
 }
 
