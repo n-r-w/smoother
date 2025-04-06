@@ -119,11 +119,11 @@ func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Dur
 	return false, res.RetryAfter, nil
 }
 
-// SetRPS updates the rate limit's requests per second.
+// SetRate updates the rate limit's requests per second.
 // This change will take effect on the next TryTake call.
-func (r *RedisRateTryer) SetRPS(rps int) error {
+func (r *RedisRateTryer) SetRate(rps int) error {
 	if rps <= 0 {
-		return fmt.Errorf("RedisRateTryer.SetRPS: invalid rps %d", rps)
+		return fmt.Errorf("RedisRateTryer.SetRate: invalid rps %d", rps)
 	}
 
 	// Update RPS atomically
@@ -167,9 +167,19 @@ func (r *RedisRateTryer) SetMultiplier(multiplier float64) error {
 	return nil
 }
 
-// GetRPS returns the current rate limit in requests per second.
-func (r *RedisRateTryer) GetRPS() int {
+// GetRate returns the current rate limit in requests per second.
+func (r *RedisRateTryer) GetRate() int {
 	return int(r.rps.Load())
+}
+
+// GetMultiplier returns the current multiplier value.
+func (r *RedisRateTryer) GetMultiplier() float64 {
+	// Get the current burst function
+	currentBurstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
+	if !ok {
+		return 1.0
+	}
+	return float64(currentBurstFunc(r.GetRate())) / float64(r.GetRate())
 }
 
 // GetBurst returns the current burst value.
