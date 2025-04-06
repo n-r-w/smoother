@@ -22,9 +22,18 @@ func WithRedisThrottledTryerBurstFromRPSFunc(burstFromRPSFunc BurstFromRPSFunc) 
 	}
 }
 
+// WithRedisThrottledTryerMultiplier sets the multiplier.
+func WithRedisThrottledTryerMultiplier(multiplier float64) RedisThrottledTryerOption {
+	return func(r *RedisThrottledTryer) {
+		r.multiplier = multiplier
+	}
+}
+
 // RedisThrottledTryer implements a rate limiter using Redis and throttled limiter.
 type RedisThrottledTryer struct {
 	mu               sync.Mutex
+	rate             int
+	multiplier       float64
 	rateLimiter      *throttled.GCRARateLimiterCtx
 	reseter          func() (*throttled.GCRARateLimiterCtx, error)
 	key              string
@@ -55,6 +64,8 @@ func NewRedisThrottledTryer(
 	}
 
 	t := &RedisThrottledTryer{
+		rate:             rps,
+		multiplier:       1,
 		key:              key,
 		burstFromRPSFunc: DefaultBurstFromRPS,
 	}
@@ -92,7 +103,9 @@ func NewRedisThrottledTryer(
 }
 
 func (r *RedisThrottledTryer) validateOptions() error {
-	// nothing to validate for now
+	if r.multiplier <= 0 {
+		return fmt.Errorf("RedisThrottledTryer.validateOptions: invalid multiplier %f", r.multiplier)
+	}
 	return nil
 }
 
@@ -131,4 +144,24 @@ func (r *RedisThrottledTryer) Reset() error {
 	}
 	r.rateLimiter = rl
 	return nil
+}
+
+// SetRate updates only the RPS (requests per second) value of the LocalTryer.
+func (r *RedisThrottledTryer) SetRate(rps int) error {
+	return fmt.Errorf("RedisThrottledTryer.SetRate: not supported")
+}
+
+// SetMultiplier updates only the multiplier value of the LocalTryer.
+func (r *RedisThrottledTryer) SetMultiplier(multiplier float64) error {
+	return fmt.Errorf("RedisThrottledTryer.SetMultiplier: not supported")
+}
+
+// GetRate returns the current rate limit in requests per second.
+func (r *RedisThrottledTryer) GetRate() int {
+	return r.rate
+}
+
+// GetMultiplier returns the current multiplier value.
+func (r *RedisThrottledTryer) GetMultiplier() float64 {
+	return r.multiplier
 }

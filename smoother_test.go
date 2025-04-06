@@ -373,7 +373,11 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 
 // Mock implementation for testing
 type mockTryer struct {
-	tryTakeFunc func(ctx context.Context, count int) (bool, time.Duration, error)
+	tryTakeFunc       func(ctx context.Context, count int) (bool, time.Duration, error)
+	getMultiplierFunc func() float64
+	getRateFunc       func() int
+	setRateFunc       func(rps int) error
+	setMultiplierFunc func(multiplier float64) error
 }
 
 func (m *mockTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
@@ -381,4 +385,32 @@ func (m *mockTryer) TryTake(ctx context.Context, count int) (bool, time.Duration
 		return m.tryTakeFunc(ctx, count)
 	}
 	return true, 0, nil
+}
+
+func (m *mockTryer) GetMultiplier() float64 {
+	if m.getMultiplierFunc != nil {
+		return m.getMultiplierFunc()
+	}
+	return 1
+}
+
+func (m *mockTryer) GetRate() int {
+	if m.getRateFunc != nil {
+		return m.getRateFunc()
+	}
+	return 0
+}
+
+func (m *mockTryer) SetRate(rps int) error {
+	if m.setRateFunc != nil {
+		return m.setRateFunc(rps)
+	}
+	return nil
+}
+
+func (m *mockTryer) SetMultiplier(multiplier float64) error {
+	if m.setMultiplierFunc != nil {
+		return m.setMultiplierFunc(multiplier)
+	}
+	return nil
 }

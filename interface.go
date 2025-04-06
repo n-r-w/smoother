@@ -11,12 +11,18 @@ type ITryer interface {
 	// If the request is allowed, it returns true and zero duration.
 	// Otherwise, it returns false and interval to wait before next request.
 	TryTake(ctx context.Context, count int) (allowed bool, waitTime time.Duration, err error)
+	// SetRate updates only the RPS (requests per second) value of the LocalTryer.
+	SetRate(rps int) error
+	// SetMultiplier updates only the multiplier value of the LocalTryer.
+	SetMultiplier(multiplier float64) error
+	// GetRate returns the current rate limit in requests per second.
+	GetRate() int
+	// GetMultiplier returns the current multiplier value.
+	GetMultiplier() float64
 }
 
-// Interfaces IRateSmoother and IRateManager are created at the place
-// of implementation for convenience of use in external packages.
-
 // IRateSmoother is an interface that responsible for smoothing the rate of requests.
+// Created at the place of implementation for convenience of use in external packages.
 type IRateSmoother interface {
 	// Take blocks to ensure that the time spent between multiple Take calls is on average per/rate.
 	// The count parameter specifies how many tokens to take at once.
@@ -26,17 +32,4 @@ type IRateSmoother interface {
 	Start()
 	// Stop stops the smoother.
 	Stop()
-}
-
-// IRateManager is an interface that responsible for changing the rate of requests
-// and getting the current rate.
-type IRateManager interface {
-	// SetRate updates only the RPS (requests per second) value of the LocalTryer.
-	SetRate(rps int) error
-	// SetMultiplier updates only the multiplier value of the LocalTryer.
-	SetMultiplier(multiplier float64) error
-	// GetRate returns the current rate limit in requests per second.
-	GetRate() int
-	// GetMultiplier returns the current multiplier value.
-	GetMultiplier() float64
 }

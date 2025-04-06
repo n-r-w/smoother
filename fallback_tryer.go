@@ -139,3 +139,35 @@ func (f *FallbackTryer) GetState() breaker.State {
 func (f *FallbackTryer) validateOptions() error {
 	return nil
 }
+
+// SetRate updates only the RPS (requests per second) value of the FallbackTryer.
+func (f *FallbackTryer) SetRate(rps int) error {
+	if err := f.primary.SetRate(rps); err != nil {
+		return fmt.Errorf("FallbackTryer.SetRate: %w", err)
+	}
+	if err := f.fallback.SetRate(rps); err != nil {
+		return fmt.Errorf("FallbackTryer.SetRate: %w", err)
+	}
+	return nil
+}
+
+// SetMultiplier updates only the multiplier value of the FallbackTryer.
+func (f *FallbackTryer) SetMultiplier(multiplier float64) error {
+	if err := f.primary.SetMultiplier(multiplier); err != nil {
+		return fmt.Errorf("FallbackTryer.SetMultiplier: %w", err)
+	}
+	if err := f.fallback.SetMultiplier(multiplier); err != nil {
+		return fmt.Errorf("FallbackTryer.SetMultiplier: %w", err)
+	}
+	return nil
+}
+
+// GetRate returns the current rate limit in requests per second.
+func (f *FallbackTryer) GetRate() int {
+	return f.primary.GetRate()
+}
+
+// GetMultiplier returns the current multiplier value.
+func (f *FallbackTryer) GetMultiplier() float64 {
+	return f.primary.GetMultiplier()
+}
