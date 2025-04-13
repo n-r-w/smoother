@@ -65,7 +65,7 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 		name      string
 		rps       float64
 		targerRPS float64
-		count     int
+		count     float64
 		duration  time.Duration
 		calls     int
 	}{
@@ -116,7 +116,7 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 			successfulCalls := 0
 
 			// Send requests faster than the rate limit
-			for range tt.calls / tt.count {
+			for range int(float64(tt.calls) / tt.count) {
 				_, err := smoother.Take(ctx, tt.count)
 				require.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 
 	// Create a mock tryer that returns an error
 	mockTryer := &mockTryer{
-		tryTakeFunc: func(ctx context.Context, count int) (bool, time.Duration, error) {
+		tryTakeFunc: func(ctx context.Context, count float64) (bool, time.Duration, error) {
 			return false, 0, customErr
 		},
 	}
@@ -343,14 +343,14 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 
 // Mock implementation for testing
 type mockTryer struct {
-	tryTakeFunc       func(ctx context.Context, count int) (bool, time.Duration, error)
+	tryTakeFunc       func(ctx context.Context, count float64) (bool, time.Duration, error)
 	getMultiplierFunc func() float64
 	getRateFunc       func() float64
 	setRateFunc       func(rps float64) error
 	setMultiplierFunc func(multiplier float64) error
 }
 
-func (m *mockTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+func (m *mockTryer) TryTake(ctx context.Context, count float64) (bool, time.Duration, error) {
 	if m.tryTakeFunc != nil {
 		return m.tryTakeFunc(ctx, count)
 	}

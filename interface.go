@@ -10,7 +10,7 @@ type ITryer interface {
 	// TryTake attempts to take n requests.
 	// If the request is allowed, it returns true and zero duration.
 	// Otherwise, it returns false and interval to wait before next request.
-	TryTake(ctx context.Context, count int) (allowed bool, waitTime time.Duration, err error)
+	TryTake(ctx context.Context, count float64) (allowed bool, waitTime time.Duration, err error)
 	// SetRate updates only the RPS (requests per second) value of the LocalTryer.
 	SetRate(rps float64) error
 	// SetMultiplier updates only the multiplier value of the LocalTryer.

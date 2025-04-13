@@ -96,7 +96,7 @@ func (r *RateSmoother) Stop() {
 // waitingRequest represents a request waiting to be processed.
 type waitingRequest struct {
 	ctx         context.Context
-	count       int
+	count       float64
 	arrivalTime time.Time
 	resultCh    chan<- takeResult
 	abandoned   atomic.Bool // Indicates if the request was abandoned
@@ -227,9 +227,9 @@ func (r *RateSmoother) handleRequest(req *waitingRequest) {
 // Take blocks to ensure that the time spent between multiple Take calls is on average per/rate.
 // The count parameter specifies how many tokens to take at once.
 // It returns the time at which function waits for allowance.
-func (r *RateSmoother) Take(ctx context.Context, count int) (time.Duration, error) {
+func (r *RateSmoother) Take(ctx context.Context, count float64) (time.Duration, error) {
 	if count <= 0 {
-		return 0, fmt.Errorf("invalid count %d", count)
+		return 0, fmt.Errorf("invalid count %f", count)
 	}
 
 	if !r.running.Load() {

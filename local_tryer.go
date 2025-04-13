@@ -60,11 +60,10 @@ func NewLocalTryer(rps float64, opts ...LocalTryerOption) (*LocalTryer, error) {
 // TryTake attempts to take n requests.
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
-func (r *LocalTryer) TryTake(_ context.Context, count int) (ok bool, duration time.Duration, err error) {
+func (r *LocalTryer) TryTake(_ context.Context, count float64) (ok bool, duration time.Duration, err error) {
 	if count < 0 {
-		return false, 0, fmt.Errorf("TryTake: invalid count %d", count)
+		return false, 0, fmt.Errorf("TryTake: invalid count %f", count)
 	}
-
 	if count == 0 {
 		return true, 0, nil
 	}

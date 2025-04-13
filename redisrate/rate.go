@@ -102,7 +102,7 @@ func (l Limiter) AllowN(
 	ctx context.Context,
 	key string,
 	limit Limit,
-	n int,
+	n float64,
 ) (*Result, error) {
 	values := []any{limit.Burst, limit.Rate, limit.Period.Seconds(), n}
 	v, err := allowN.Run(ctx, l.rdb, []string{redisPrefix + key}, values...).Result()

@@ -101,7 +101,7 @@ func (f *FallbackTryer) Stop() error {
 }
 
 // TryTake attempts to take n requests.
-func (f *FallbackTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+func (f *FallbackTryer) TryTake(ctx context.Context, count float64) (bool, time.Duration, error) {
 	var (
 		start                           = time.Now()
 		allowedPrimary, allowedFallback bool

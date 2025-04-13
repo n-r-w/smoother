@@ -11,7 +11,7 @@ import (
 
 func rateLimiter() *Limiter {
 	ring := redis.NewRing(&redis.RingOptions{
-		Addrs: map[string]string{"server0": ":26379"},
+		Addrs: map[string]string{"server0": ":6379"},
 	})
 	if err := ring.FlushDB(context.TODO()).Err(); err != nil {
 		panic(err)

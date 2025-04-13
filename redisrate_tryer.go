@@ -86,7 +86,7 @@ func (r *RedisRateTryer) validateOptions() error {
 // TryTake attempts to take n requests.
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
-func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+func (r *RedisRateTryer) TryTake(ctx context.Context, count float64) (bool, time.Duration, error) {
 	// Get current RPS and burst values
 	r.mu.RLock()
 	rps := r.rps

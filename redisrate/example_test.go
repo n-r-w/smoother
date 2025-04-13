@@ -10,7 +10,7 @@ import (
 func ExampleNewLimiter() {
 	ctx := context.Background()
 	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:26379",
+		Addr: "localhost:6379",
 	})
 	_ = rdb.FlushDB(ctx).Err()
 
