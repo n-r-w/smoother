@@ -20,8 +20,6 @@ require (
 require (
 	github.com/alicebob/miniredis/v2 v2.34.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-redis/redis_rate/v10 v10.0.1
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/throttled/throttled/v2 v2.13.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

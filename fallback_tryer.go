@@ -141,7 +141,7 @@ func (f *FallbackTryer) validateOptions() error {
 }
 
 // SetRate updates only the RPS (requests per second) value of the FallbackTryer.
-func (f *FallbackTryer) SetRate(rps int) error {
+func (f *FallbackTryer) SetRate(rps float64) error {
 	if err := f.primary.SetRate(rps); err != nil {
 		return fmt.Errorf("FallbackTryer.SetRate: %w", err)
 	}
@@ -163,7 +163,7 @@ func (f *FallbackTryer) SetMultiplier(multiplier float64) error {
 }
 
 // GetRate returns the current rate limit in requests per second.
-func (f *FallbackTryer) GetRate() int {
+func (f *FallbackTryer) GetRate() float64 {
 	return f.primary.GetRate()
 }
 

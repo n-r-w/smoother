@@ -3,10 +3,10 @@ package smoother
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
+	"sync"
 	"time"
 
-	"github.com/go-redis/redis_rate/v10"
+	"github.com/n-r-w/smoother/redisrate"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -16,24 +16,27 @@ type RedisRateTryerOption func(*RedisRateTryer)
 // WithRedisRateTryerBurstFromRPSFunc sets the burst from rps function.
 func WithRedisRateTryerBurstFromRPSFunc(burstFromRPSFunc BurstFromRPSFunc) RedisRateTryerOption {
 	return func(t *RedisRateTryer) {
-		t.burstFromRPSFunc.Store(burstFromRPSFunc)
+		t.burstFromRPSFunc = burstFromRPSFunc
 	}
 }
 
 // RedisRateTryer implements a rate limiter using Redis and Redis Rate.
 type RedisRateTryer struct {
-	redisLimiter     *redis_rate.Limiter
-	key              string
-	rps              atomic.Int64 // atomic RPS value
-	burst            atomic.Int64 // atomic burst value
-	burstFromRPSFunc atomic.Value // stores BurstFromRPSFunc
+	redisLimiter *redisrate.Limiter
+	key          string
+
+	rps              float64
+	burst            float64
+	burstFromRPSFunc BurstFromRPSFunc
+
+	mu sync.RWMutex
 }
 
 var _ ITryer = (*RedisRateTryer)(nil)
 
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(
-	redisClient redis.UniversalClient, key string, rps int, opts ...RedisRateTryerOption,
+	redisClient redis.UniversalClient, key string, rps float64, opts ...RedisRateTryerOption,
 ) (*RedisRateTryer, error) {
 	if redisClient == nil {
 		return nil, fmt.Errorf("NewRedisRateTryer: redisClient is nil")
@@ -44,10 +47,10 @@ func NewRedisRateTryer(
 	}
 
 	if rps <= 0 {
-		return nil, fmt.Errorf("NewRedisRateTryer: invalid rps %d", rps)
+		return nil, fmt.Errorf("NewRedisRateTryer: invalid rps %f", rps)
 	}
 
-	redisLimiter := redis_rate.NewLimiter(redisClient)
+	redisLimiter := redisrate.NewLimiter(redisClient)
 
 	t := &RedisRateTryer{
 		redisLimiter: redisLimiter,
@@ -55,12 +58,11 @@ func NewRedisRateTryer(
 	}
 
 	// Set initial RPS
-	t.rps.Store(int64(rps))
+	t.rps = rps
 
 	// Set default burst function
 	// Store the function with its concrete type to avoid type assertion issues
-	var defaultFunc BurstFromRPSFunc = DefaultBurstFromRPS
-	t.burstFromRPSFunc.Store(defaultFunc)
+	t.burstFromRPSFunc = DefaultBurstFromRPS
 
 	for _, opt := range opts {
 		opt(t)
@@ -71,12 +73,7 @@ func NewRedisRateTryer(
 	}
 
 	// Calculate initial burst value
-	// Safely retrieve the function with proper type assertion
-	burstFunc, ok := t.burstFromRPSFunc.Load().(BurstFromRPSFunc)
-	if !ok {
-		return nil, fmt.Errorf("NewRedisRateTryer: invalid burst function type")
-	}
-	t.burst.Store(int64(burstFunc(rps)))
+	t.burst = t.burstFromRPSFunc(rps)
 
 	return t, nil
 }
@@ -90,21 +87,23 @@ func (r *RedisRateTryer) validateOptions() error {
 // If the request is allowed, it returns true and zero duration.
 // Otherwise, it returns false and interval to wait before next request.
 func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
-	// Get current RPS and burst values atomically
-	rps := r.rps.Load()
-	burst := r.burst.Load()
+	// Get current RPS and burst values
+	r.mu.RLock()
+	rps := r.rps
+	burst := r.burst
+	r.mu.RUnlock()
 
 	// Burst should be at least the number of requests, otherwise it will hang
-	minBurst := int64(count + 1)
+	minBurst := float64(count) + 1
 	if burst < minBurst {
 		burst = minBurst
 	}
 
 	// Create limit for this request
-	limit := redis_rate.Limit{
-		Rate:   int(rps),
+	limit := redisrate.Limit{
+		Rate:   rps,
 		Period: time.Second,
-		Burst:  int(burst),
+		Burst:  burst,
 	}
 
 	res, err := r.redisLimiter.AllowN(ctx, r.key, limit, count)
@@ -121,20 +120,19 @@ func (r *RedisRateTryer) TryTake(ctx context.Context, count int) (bool, time.Dur
 
 // SetRate updates the rate limit's requests per second.
 // This change will take effect on the next TryTake call.
-func (r *RedisRateTryer) SetRate(rps int) error {
+func (r *RedisRateTryer) SetRate(rps float64) error {
 	if rps <= 0 {
-		return fmt.Errorf("RedisRateTryer.SetRate: invalid rps %d", rps)
+		return fmt.Errorf("RedisRateTryer.SetRate: invalid rps %f", rps)
 	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Update RPS atomically
-	r.rps.Store(int64(rps))
+	r.rps = rps
 
 	// Calculate and update burst atomically
-	burstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
-	if !ok {
-		return fmt.Errorf("RedisRateTryer.SetRPS: invalid burst function type")
-	}
-	r.burst.Store(int64(burstFunc(rps)))
+	r.burst = r.burstFromRPSFunc(rps)
 
 	return nil
 }
@@ -146,45 +144,45 @@ func (r *RedisRateTryer) SetMultiplier(multiplier float64) error {
 		return fmt.Errorf("RedisRateTryer.SetMultiplier: invalid multiplier %f", multiplier)
 	}
 
-	// Get the current burst function
-	currentBurstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
-	if !ok {
-		return fmt.Errorf("RedisRateTryer.SetMultiplier: invalid burst function type")
+	// Create a new burst function that applies the multiplier
+	newFunc := func(rps float64) float64 {
+		return float64(rps) * multiplier
 	}
 
-	// Create a new burst function that applies the multiplier
-	newFunc := func(rps int) int {
-		return int(float64(currentBurstFunc(rps)) * multiplier)
-	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
 	// Store the new function
-	r.burstFromRPSFunc.Store(newFunc)
+	r.burstFromRPSFunc = newFunc
 
 	// Update the burst value with the new function
-	currentRPS := int(r.rps.Load())
-	r.burst.Store(int64(newFunc(currentRPS)))
+	r.burst = newFunc(r.rps)
 
 	return nil
 }
 
 // GetRate returns the current rate limit in requests per second.
-func (r *RedisRateTryer) GetRate() int {
-	return int(r.rps.Load())
+func (r *RedisRateTryer) GetRate() float64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.rps
 }
 
 // GetMultiplier returns the current multiplier value.
 func (r *RedisRateTryer) GetMultiplier() float64 {
-	// Get the current burst function
-	currentBurstFunc, ok := r.burstFromRPSFunc.Load().(BurstFromRPSFunc)
-	if !ok {
-		return 1.0
-	}
-	return float64(currentBurstFunc(r.GetRate())) / float64(r.GetRate())
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.burst / r.rps
 }
 
 // GetBurst returns the current burst value.
-func (r *RedisRateTryer) GetBurst() int {
-	return int(r.burst.Load())
+func (r *RedisRateTryer) GetBurst() float64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.burst
 }
 
 // Reset resets the Tryer to its initial state.

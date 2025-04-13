@@ -39,8 +39,7 @@ go get github.com/n-r-w/smoother
 
 ## Rate Limiter backends
 
-- [Redis Rate](https://github.com/go-redis/redis_rate)
-- [Throttled with Redis backend](https://github.com/throttled/throttled)
+- [Redis](./redisrate). Forked from <https://github.com/go-redis/redis_rate> and modified to support floating numbers.
 - [In-memory](./local_tryer.go)
 - [Primary + fallback + circuit breaker](./fallback_tryer.go). For example, to use Redis Rate as the primary Tryer and In-memory as the fallback.
 

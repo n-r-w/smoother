@@ -15,25 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type getTestTryer func(rps int) ITryer
-
-func setupThrottledTryer(t *testing.T) getTestTryer {
-	t.Helper()
-
-	mr := miniredis.RunT(t)
-
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	require.NoError(t, client.Ping(context.Background()).Err())
-
-	tryerGetter := func(rps int) ITryer {
-		tryer, err := NewRedisThrottledTryer(
-			client, "test", rps)
-		require.NoError(t, err)
-		return tryer
-	}
-
-	return tryerGetter
-}
+type getTestTryer func(rps float64) ITryer
 
 func setupRedisRateTryer(t *testing.T) getTestTryer {
 	t.Helper()
@@ -43,7 +25,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	require.NoError(t, client.Ping(context.Background()).Err())
 
-	tryerGetter := func(rps int) ITryer {
+	tryerGetter := func(rps float64) ITryer {
 		// Create RedisRateTryer without any custom options
 		// This will use the default BurstFromRPSFunc
 		tryer, err := NewRedisRateTryer(client, "test", rps)
@@ -57,7 +39,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 func setupTestLocalTryer(t *testing.T) getTestTryer {
 	t.Helper()
 
-	tryerGetter := func(rps int) ITryer {
+	tryerGetter := func(rps float64) ITryer {
 		tryer, err := NewLocalTryer(rps)
 		require.NoError(t, err)
 		return tryer
@@ -71,9 +53,6 @@ func TestRateSmoother_Take(t *testing.T) {
 		testRateSmoother_Take_helper(t, setupTestLocalTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_Take_helper(t, setupThrottledTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_Take_helper(t, setupRedisRateTryer(t))
 	})
 }
@@ -84,8 +63,8 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 
 	tests := []struct {
 		name      string
-		rps       int
-		targerRPS int
+		rps       float64
+		targerRPS float64
 		count     int
 		duration  time.Duration
 		calls     int
@@ -164,9 +143,6 @@ func TestRateSmoother_ContextCancellation(t *testing.T) {
 		testRateSmoother_ContextCancellation_Helper(t, setupTestLocalTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_ContextCancellation_Helper(t, setupThrottledTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_ContextCancellation_Helper(t, setupRedisRateTryer(t))
 	})
 }
@@ -203,9 +179,6 @@ func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTe
 func TestRateSmoother_Concurrency(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_Concurrency_Helper(t, setupTestLocalTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_Concurrency_Helper(t, setupThrottledTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_Concurrency_Helper(t, setupRedisRateTryer(t))
@@ -281,9 +254,6 @@ func testRateSmoother_Concurrency_Helper(t *testing.T, tryerGetter getTestTryer)
 func TestRateSmoother_ShutdownWithPendingRequests(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupTestLocalTryer(t))
-	})
-	t.Run("redis_throttled", func(t *testing.T) {
-		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupThrottledTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupRedisRateTryer(t))
@@ -375,8 +345,8 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 type mockTryer struct {
 	tryTakeFunc       func(ctx context.Context, count int) (bool, time.Duration, error)
 	getMultiplierFunc func() float64
-	getRateFunc       func() int
-	setRateFunc       func(rps int) error
+	getRateFunc       func() float64
+	setRateFunc       func(rps float64) error
 	setMultiplierFunc func(multiplier float64) error
 }
 
@@ -394,14 +364,14 @@ func (m *mockTryer) GetMultiplier() float64 {
 	return 1
 }
 
-func (m *mockTryer) GetRate() int {
+func (m *mockTryer) GetRate() float64 {
 	if m.getRateFunc != nil {
 		return m.getRateFunc()
 	}
 	return 0
 }
 
-func (m *mockTryer) SetRate(rps int) error {
+func (m *mockTryer) SetRate(rps float64) error {
 	if m.setRateFunc != nil {
 		return m.setRateFunc(rps)
 	}

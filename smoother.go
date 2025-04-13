@@ -266,11 +266,11 @@ func (r *RateSmoother) Take(ctx context.Context, count int) (time.Duration, erro
 }
 
 // BurstFromRPSFunc is the function to calculate the burst from rps.
-type BurstFromRPSFunc func(rps int) int
+type BurstFromRPSFunc func(rps float64) float64
 
 // DefaultBurstFromRPS calculates the empirical dependency of the burst,
 // so that it does not freeze rps.
-func DefaultBurstFromRPS(rps int) int {
+func DefaultBurstFromRPS(rps float64) float64 {
 	burst := rps / 500 //nolint:mnd // ok
 	if burst < 1 {
 		burst = 1
