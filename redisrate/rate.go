@@ -9,8 +9,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const redisPrefix = "rate:"
-
 type rediser interface {
 	Eval(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd
 	EvalSha(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd
@@ -82,14 +80,23 @@ func PerHour(rate float64) Limit {
 
 // Limiter controls how frequently events are allowed to happen.
 type Limiter struct {
-	rdb rediser
+	rdb    rediser
+	prefix string
 }
 
 // NewLimiter returns a new Limiter.
-func NewLimiter(rdb rediser) *Limiter {
-	return &Limiter{
-		rdb: rdb,
+func NewLimiter(rdb rediser, prefix string) (*Limiter, error) {
+	if rdb == nil {
+		return nil, fmt.Errorf("redis: redis client is nil")
 	}
+	if prefix == "" {
+		return nil, fmt.Errorf("redis: prefix is empty")
+	}
+
+	return &Limiter{
+		rdb:    rdb,
+		prefix: prefix + ":",
+	}, nil
 }
 
 // Allow is a shortcut for AllowN(ctx, key, limit, 1).
@@ -105,7 +112,7 @@ func (l Limiter) AllowN(
 	n float64,
 ) (*Result, error) {
 	values := []any{limit.Burst, limit.Rate, limit.Period.Seconds(), n}
-	v, err := allowN.Run(ctx, l.rdb, []string{redisPrefix + key}, values...).Result()
+	v, err := allowN.Run(ctx, l.rdb, []string{l.prefix + key}, values...).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +173,7 @@ func (l Limiter) AllowAtMost(
 	n int,
 ) (*Result, error) {
 	values := []any{limit.Burst, limit.Rate, limit.Period.Seconds(), n}
-	v, err := allowAtMost.Run(ctx, l.rdb, []string{redisPrefix + key}, values...).Result()
+	v, err := allowAtMost.Run(ctx, l.rdb, []string{l.prefix + key}, values...).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +227,7 @@ func (l Limiter) AllowAtMost(
 
 // Reset gets a key and reset all limitations and previous usages
 func (l *Limiter) Reset(ctx context.Context, key string) error {
-	return l.rdb.Del(ctx, redisPrefix+key).Err()
+	return l.rdb.Del(ctx, l.prefix+key).Err()
 }
 
 func dur(f float64) time.Duration {

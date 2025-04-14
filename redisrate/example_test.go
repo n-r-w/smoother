@@ -14,7 +14,10 @@ func ExampleNewLimiter() {
 	})
 	_ = rdb.FlushDB(ctx).Err()
 
-	limiter := NewLimiter(rdb)
+	limiter, err := NewLimiter(rdb, "rate")
+	if err != nil {
+		panic(err)
+	}
 	res, err := limiter.Allow(ctx, "project:123", PerSecond(10.0))
 	if err != nil {
 		panic(err)

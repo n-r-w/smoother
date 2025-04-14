@@ -23,6 +23,7 @@ func WithRedisRateTryerBurstFromRPSFunc(burstFromRPSFunc BurstFromRPSFunc) Redis
 // RedisRateTryer implements a rate limiter using Redis and Redis Rate.
 type RedisRateTryer struct {
 	redisLimiter *redisrate.Limiter
+	prefix       string
 	key          string
 
 	rps              float64
@@ -36,10 +37,14 @@ var _ ITryer = (*RedisRateTryer)(nil)
 
 // NewRedisRateTryer creates a new RedisTryer.
 func NewRedisRateTryer(
-	redisClient redis.UniversalClient, key string, rps float64, opts ...RedisRateTryerOption,
+	redisClient redis.UniversalClient, prefix, key string, rps float64, opts ...RedisRateTryerOption,
 ) (*RedisRateTryer, error) {
 	if redisClient == nil {
 		return nil, fmt.Errorf("NewRedisRateTryer: redisClient is nil")
+	}
+
+	if prefix == "" {
+		return nil, fmt.Errorf("NewRedisRateTryer: prefix is empty")
 	}
 
 	if key == "" {
@@ -50,7 +55,10 @@ func NewRedisRateTryer(
 		return nil, fmt.Errorf("NewRedisRateTryer: invalid rps %f", rps)
 	}
 
-	redisLimiter := redisrate.NewLimiter(redisClient)
+	redisLimiter, err := redisrate.NewLimiter(redisClient, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("NewRedisRateTryer: %w", err)
+	}
 
 	t := &RedisRateTryer{
 		redisLimiter: redisLimiter,

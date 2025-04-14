@@ -76,7 +76,7 @@ func main() {
 	}
 
 	// redis tryer
-	redisRateTryer, err := smoother.NewRedisRateTryer(client, "test", rps)
+	redisRateTryer, err := smoother.NewRedisRateTryer(client, "prefix", "test", rps)
 	if err != nil {
 		log.Fatal(err)
 	}
