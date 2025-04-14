@@ -113,7 +113,11 @@ func (r *LocalTryer) GetMultiplier() float64 {
 
 // calculateMinInterval calculates the minimum interval between requests based on RPS and multiplier.
 func (r *LocalTryer) calculateMinInterval(rps float64) time.Duration {
-	return time.Second * time.Duration(r.multiplier) / time.Duration(rps)
+	if rps == 0 {
+		return 0
+	}
+
+	return time.Duration(float64(time.Second) * r.multiplier / rps)
 }
 
 // SetRate updates only the RPS (requests per second) value of the LocalTryer.
