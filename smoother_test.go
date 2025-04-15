@@ -286,7 +286,7 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		requestsStarted.Add(1)
 		go func() {
 			defer wg.Done()
-			requestsStarted.Done() // Сигнализируем, что горутина запущена
+			requestsStarted.Done() // Signal that the request has started
 
 			// This call will be queued and then interrupted by shutdown
 			_, err := smoother.Take(ctx, 1)
@@ -297,9 +297,9 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		}()
 	}
 
-	// Ждем, пока все горутины точно запустятся
+	// Wait for all goroutines to start
 	requestsStarted.Wait()
-	// Даем дополнительное время для гарантированного попадания в очередь
+	// Give additional time for guaranteed queueing
 	time.Sleep(100 * time.Millisecond)
 
 	smoother.Stop()

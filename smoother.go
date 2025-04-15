@@ -271,12 +271,6 @@ type BurstFromRPSFunc func(rps float64) float64
 // DefaultBurstFromRPS calculates the empirical dependency of the burst,
 // so that it does not freeze rps.
 func DefaultBurstFromRPS(rps float64) float64 {
-	burst := rps / 500 //nolint:mnd // ok
-	if burst < 1 {
-		burst = 1
-	}
-	if burst > 100 { //nolint:mnd // ok
-		burst = 100
-	}
+	burst := min(max(rps/500, 1), 100) //nolint:mnd // ok
 	return burst
 }

@@ -22,8 +22,8 @@ func WithRedisRateTryerBurstFromRPSFunc(burstFromRPSFunc BurstFromRPSFunc) Redis
 
 // RedisRateTryer implements a rate limiter using Redis and Redis Rate.
 type RedisRateTryer struct {
+	redisClient  redis.UniversalClient
 	redisLimiter *redisrate.Limiter
-	prefix       string
 	key          string
 
 	rps              float64
@@ -61,6 +61,7 @@ func NewRedisRateTryer(
 	}
 
 	t := &RedisRateTryer{
+		redisClient:  redisClient,
 		redisLimiter: redisLimiter,
 		key:          key,
 	}
