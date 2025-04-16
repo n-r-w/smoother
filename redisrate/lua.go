@@ -1,15 +1,10 @@
-// Основано на:
+// Based on:
 // Copyright (c) 2017 Pavel Pravosud
 // https://github.com/rwz/redis-gcra/blob/master/vendor/perform_gcra_ratelimit.lua
 
 package redisrate
 
-import "github.com/redis/go-redis/v9"
-
-var allowN = redis.NewScript(`
--- this script has side-effects, so it requires replicate commands mode
-redis.replicate_commands()
-
+var allowNScript = `
 local rate_limit_key = KEYS[1]
 local burst = tonumber(ARGV[1])
 local rate = tonumber(ARGV[2])
@@ -69,16 +64,13 @@ if reset_after > 0 then
 end
 local retry_after = -1
 return {cost, tostring(remaining), tostring(retry_after), tostring(reset_after)}
-`)
+`
 
-var allowAtMost = redis.NewScript(`
--- this script has side-effects, so it requires replicate commands mode
-redis.replicate_commands()
-
+var allowAtMostScript = `
 local rate_limit_key = KEYS[1]
-local burst = ARGV[1]
-local rate = ARGV[2]
-local period = ARGV[3]
+local burst = tonumber(ARGV[1])
+local rate = tonumber(ARGV[2])
+local period = tonumber(ARGV[3])
 local cost = tonumber(ARGV[4])
 
 local emission_interval = period / rate
@@ -142,4 +134,4 @@ return {
   tostring(-1),
   tostring(reset_after),
 }
-`)
+`

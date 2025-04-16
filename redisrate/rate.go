@@ -7,17 +7,12 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/singleflight"
 )
 
 type rediser interface {
-	Eval(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd
-	EvalSha(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd
-	ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd
-	ScriptLoad(ctx context.Context, script string) *redis.StringCmd
-	Del(ctx context.Context, keys ...string) *redis.IntCmd
-
-	EvalRO(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd
-	EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd
+	redis.Scripter
+	redis.Cmdable
 }
 
 // Limit defines the maximum frequency of some events.
@@ -82,6 +77,10 @@ func PerHour(rate float64) Limit {
 type Limiter struct {
 	rdb    rediser
 	prefix string
+
+	scriptGroup       *singleflight.Group
+	allowNScript      *redis.Script
+	allowAtMostScript *redis.Script
 }
 
 // NewLimiter returns a new Limiter.
@@ -94,8 +93,11 @@ func NewLimiter(rdb rediser, prefix string) (*Limiter, error) {
 	}
 
 	return &Limiter{
-		rdb:    rdb,
-		prefix: prefix + ":",
+		rdb:               rdb,
+		prefix:            prefix + ":",
+		scriptGroup:       &singleflight.Group{},
+		allowNScript:      redis.NewScript(allowNScript),
+		allowAtMostScript: redis.NewScript(allowAtMostScript),
 	}, nil
 }
 
@@ -112,7 +114,11 @@ func (l Limiter) AllowN(
 	n float64,
 ) (*Result, error) {
 	values := []any{limit.Burst, limit.Rate, limit.Period.Seconds(), n}
-	v, err := allowN.Run(ctx, l.rdb, []string{l.prefix + key}, values...).Result()
+	cmd, err := l.runScript(ctx, l.allowNScript, []string{l.prefix + key}, values...)
+	if err != nil {
+		return nil, err
+	}
+	v, err := cmd.Result()
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +179,11 @@ func (l Limiter) AllowAtMost(
 	n int,
 ) (*Result, error) {
 	values := []any{limit.Burst, limit.Rate, limit.Period.Seconds(), n}
-	v, err := allowAtMost.Run(ctx, l.rdb, []string{l.prefix + key}, values...).Result()
+	cmd, err := l.runScript(ctx, l.allowAtMostScript, []string{l.prefix + key}, values...)
+	if err != nil {
+		return nil, err
+	}
+	v, err := cmd.Result()
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +238,36 @@ func (l Limiter) AllowAtMost(
 // Reset gets a key and reset all limitations and previous usages
 func (l *Limiter) Reset(ctx context.Context, key string) error {
 	return l.rdb.Del(ctx, l.prefix+key).Err()
+}
+
+// runScript runs a Lua script on the Redis server.
+func (l *Limiter) runScript(ctx context.Context, script *redis.Script, keys []string, args ...any) (*redis.Cmd, error) {
+	// script.Run suppresses the error if the script is not loaded, and call Eval every time.
+	// it impacts performance, so we use EvalSha directly.
+	cmd := script.EvalSha(ctx, l.rdb, keys, args...)
+	if cmd.Err() != nil && redis.HasErrorPrefix(cmd.Err(), "NOSCRIPT") {
+		if err := l.reloadScripts(ctx); err != nil {
+			return nil, fmt.Errorf("failed to reload script: %w", err)
+		}
+		if cmd = script.EvalSha(ctx, l.rdb, keys, args...); cmd.Err() != nil {
+			return nil, fmt.Errorf("failed to run script after reload: %w", cmd.Err())
+		}
+	}
+
+	return cmd, nil
+}
+
+func (l *Limiter) reloadScripts(ctx context.Context) error {
+	_, err, _ := l.scriptGroup.Do("script", func() (any, error) {
+		if _, err := l.allowNScript.Load(ctx, l.rdb).Result(); err != nil {
+			return nil, fmt.Errorf("failed to reload register script: %w", err)
+		}
+		if _, err := l.allowAtMostScript.Load(ctx, l.rdb).Result(); err != nil {
+			return nil, fmt.Errorf("failed to reload get script: %w", err)
+		}
+		return nil, nil //nolint:nilnil // false positive
+	})
+	return err
 }
 
 func dur(f float64) time.Duration {
