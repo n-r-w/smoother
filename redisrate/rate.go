@@ -259,6 +259,7 @@ func (l *Limiter) runScript(ctx context.Context, script *redis.Script, keys []st
 
 func (l *Limiter) reloadScripts(ctx context.Context) error {
 	_, err, _ := l.scriptGroup.Do("script", func() (any, error) {
+		// cluster client will automatically load scripts to all shards
 		if _, err := l.allowNScript.Load(ctx, l.rdb).Result(); err != nil {
 			return nil, fmt.Errorf("failed to reload register script: %w", err)
 		}
