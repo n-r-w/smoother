@@ -15,25 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type getTestTryer func(rps int) Tryer
-
-func setupThrottledTryer(t *testing.T) getTestTryer {
-	t.Helper()
-
-	mr := miniredis.RunT(t)
-
-	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	require.NoError(t, client.Ping(context.Background()).Err())
-
-	tryerGetter := func(rps int) Tryer {
-		tryer, err := NewRedisThrottledTryer(
-			client, "test", rps)
-		require.NoError(t, err)
-		return tryer
-	}
-
-	return tryerGetter
-}
+type getTestTryer func(rps float64) ITryer
 
 func setupRedisRateTryer(t *testing.T) getTestTryer {
 	t.Helper()
@@ -43,8 +25,10 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	require.NoError(t, client.Ping(context.Background()).Err())
 
-	tryerGetter := func(rps int) Tryer {
-		tryer, err := NewRedisRateTryer(client, "test", rps)
+	tryerGetter := func(rps float64) ITryer {
+		// Create RedisRateTryer without any custom options
+		// This will use the default BurstFromRPSFunc
+		tryer, err := NewRedisRateTryer(client, "prefix", "test", rps)
 		require.NoError(t, err)
 		return tryer
 	}
@@ -55,7 +39,7 @@ func setupRedisRateTryer(t *testing.T) getTestTryer {
 func setupTestLocalTryer(t *testing.T) getTestTryer {
 	t.Helper()
 
-	tryerGetter := func(rps int) Tryer {
+	tryerGetter := func(rps float64) ITryer {
 		tryer, err := NewLocalTryer(rps)
 		require.NoError(t, err)
 		return tryer
@@ -69,9 +53,6 @@ func TestRateSmoother_Take(t *testing.T) {
 		testRateSmoother_Take_helper(t, setupTestLocalTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_Take_helper(t, setupThrottledTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_Take_helper(t, setupRedisRateTryer(t))
 	})
 }
@@ -82,9 +63,9 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 
 	tests := []struct {
 		name      string
-		rps       int
-		targerRPS int
-		count     int
+		rps       float64
+		targerRPS float64
+		count     float64
 		duration  time.Duration
 		calls     int
 	}{
@@ -135,7 +116,7 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 			successfulCalls := 0
 
 			// Send requests faster than the rate limit
-			for range tt.calls / tt.count {
+			for range int(float64(tt.calls) / tt.count) {
 				_, err := smoother.Take(ctx, tt.count)
 				require.NoError(t, err)
 
@@ -160,9 +141,6 @@ func testRateSmoother_Take_helper(t *testing.T, tryerGetter getTestTryer) {
 func TestRateSmoother_ContextCancellation(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_ContextCancellation_Helper(t, setupTestLocalTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_ContextCancellation_Helper(t, setupThrottledTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_ContextCancellation_Helper(t, setupRedisRateTryer(t))
@@ -201,9 +179,6 @@ func testRateSmoother_ContextCancellation_Helper(t *testing.T, tryerGetter getTe
 func TestRateSmoother_Concurrency(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_Concurrency_Helper(t, setupTestLocalTryer(t))
-	})
-	t.Run("redis_rate", func(t *testing.T) {
-		testRateSmoother_Concurrency_Helper(t, setupThrottledTryer(t))
 	})
 	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_Concurrency_Helper(t, setupRedisRateTryer(t))
@@ -280,9 +255,6 @@ func TestRateSmoother_ShutdownWithPendingRequests(t *testing.T) {
 	t.Run("local", func(t *testing.T) {
 		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupTestLocalTryer(t))
 	})
-	t.Run("redis_throttled", func(t *testing.T) {
-		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupThrottledTryer(t))
-	})
 	t.Run("redis_rate", func(t *testing.T) {
 		testRateSmoother_ShutdownWithPendingRequests_Helper(t, setupRedisRateTryer(t))
 	})
@@ -314,7 +286,7 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		requestsStarted.Add(1)
 		go func() {
 			defer wg.Done()
-			requestsStarted.Done() // Сигнализируем, что горутина запущена
+			requestsStarted.Done() // Signal that the request has started
 
 			// This call will be queued and then interrupted by shutdown
 			_, err := smoother.Take(ctx, 1)
@@ -325,9 +297,9 @@ func testRateSmoother_ShutdownWithPendingRequests_Helper(t *testing.T, tryerGett
 		}()
 	}
 
-	// Ждем, пока все горутины точно запустятся
+	// Wait for all goroutines to start
 	requestsStarted.Wait()
-	// Даем дополнительное время для гарантированного попадания в очередь
+	// Give additional time for guaranteed queueing
 	time.Sleep(100 * time.Millisecond)
 
 	smoother.Stop()
@@ -349,7 +321,7 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 
 	// Create a mock tryer that returns an error
 	mockTryer := &mockTryer{
-		tryTakeFunc: func(ctx context.Context, count int) (bool, time.Duration, error) {
+		tryTakeFunc: func(ctx context.Context, count float64) (bool, time.Duration, error) {
 			return false, 0, customErr
 		},
 	}
@@ -371,12 +343,44 @@ func TestRateSmoother_HandleRequest_TryerError(t *testing.T) {
 
 // Mock implementation for testing
 type mockTryer struct {
-	tryTakeFunc func(ctx context.Context, count int) (bool, time.Duration, error)
+	tryTakeFunc       func(ctx context.Context, count float64) (bool, time.Duration, error)
+	getMultiplierFunc func() float64
+	getRateFunc       func() float64
+	setRateFunc       func(rps float64) error
+	setMultiplierFunc func(multiplier float64) error
 }
 
-func (m *mockTryer) TryTake(ctx context.Context, count int) (bool, time.Duration, error) {
+func (m *mockTryer) TryTake(ctx context.Context, count float64) (bool, time.Duration, error) {
 	if m.tryTakeFunc != nil {
 		return m.tryTakeFunc(ctx, count)
 	}
 	return true, 0, nil
+}
+
+func (m *mockTryer) GetMultiplier() float64 {
+	if m.getMultiplierFunc != nil {
+		return m.getMultiplierFunc()
+	}
+	return 1
+}
+
+func (m *mockTryer) GetRate() float64 {
+	if m.getRateFunc != nil {
+		return m.getRateFunc()
+	}
+	return 0
+}
+
+func (m *mockTryer) SetRate(rps float64) error {
+	if m.setRateFunc != nil {
+		return m.setRateFunc(rps)
+	}
+	return nil
+}
+
+func (m *mockTryer) SetMultiplier(multiplier float64) error {
+	if m.setMultiplierFunc != nil {
+		return m.setMultiplierFunc(multiplier)
+	}
+	return nil
 }
