@@ -16,7 +16,7 @@ func rateLimiter() *Limiter {
 	if err := ring.FlushDB(context.TODO()).Err(); err != nil {
 		panic(err)
 	}
-	r, err := NewLimiter(ring, "rate")
+	r, err := NewLimiter(ring, "rate_test")
 	if err != nil {
 		panic(err)
 	}
