@@ -1,6 +1,9 @@
 # Rate limiting for go-redis
 
-## github.com/redis/go-redis with floating numbers support
+## github.com/redis/go-redis with some changes
+
+- floating numbers support
+- correct operation with redis cluster
 
 [![Build Status](https://travis-ci.org/go-redis/redis_rate.svg?branch=master)](https://travis-ci.org/go-redis/redis_rate)
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/redis/go-redis/v8)](https://pkg.go.dev/github.com/go-redis/redis_rate/v9)
