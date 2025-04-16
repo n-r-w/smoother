@@ -57,15 +57,8 @@ func main() {
 			Addr: mr.Addr(),
 		})
 	} else {
-		client = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: []string{
-				"localhost:6379",
-				"localhost:6380",
-				"localhost:6381",
-				"localhost:6382",
-				"localhost:6383",
-				"localhost:6384",
-			},
+		client = redis.NewClient(&redis.Options{
+			Addr: "localhost:6379",
 		})
 	}
 
