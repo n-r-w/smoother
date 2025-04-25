@@ -36,7 +36,7 @@ func WithQueueSize(size int) Option {
 
 // RateSmoother implements a rate limiter that blocks to ensure that the time spent between multiple.
 type RateSmoother struct {
-	tryer   Tryer
+	tryer   ITryer
 	timeout time.Duration
 
 	queueSize    int
@@ -47,7 +47,7 @@ type RateSmoother struct {
 }
 
 // NewRateSmoother creates a new RateSmoother instance.
-func NewRateSmoother(tryer Tryer, opts ...Option) (*RateSmoother, error) {
+func NewRateSmoother(tryer ITryer, opts ...Option) (*RateSmoother, error) {
 	if tryer == nil {
 		return nil, fmt.Errorf("NewRateSmoother: nil tryer")
 	}
@@ -96,7 +96,7 @@ func (r *RateSmoother) Stop() {
 // waitingRequest represents a request waiting to be processed.
 type waitingRequest struct {
 	ctx         context.Context
-	count       int
+	count       float64
 	arrivalTime time.Time
 	resultCh    chan<- takeResult
 	abandoned   atomic.Bool // Indicates if the request was abandoned
@@ -227,9 +227,9 @@ func (r *RateSmoother) handleRequest(req *waitingRequest) {
 // Take blocks to ensure that the time spent between multiple Take calls is on average per/rate.
 // The count parameter specifies how many tokens to take at once.
 // It returns the time at which function waits for allowance.
-func (r *RateSmoother) Take(ctx context.Context, count int) (time.Duration, error) {
+func (r *RateSmoother) Take(ctx context.Context, count float64) (time.Duration, error) {
 	if count <= 0 {
-		return 0, fmt.Errorf("invalid count %d", count)
+		return 0, fmt.Errorf("invalid count %f", count)
 	}
 
 	if !r.running.Load() {
@@ -266,17 +266,11 @@ func (r *RateSmoother) Take(ctx context.Context, count int) (time.Duration, erro
 }
 
 // BurstFromRPSFunc is the function to calculate the burst from rps.
-type BurstFromRPSFunc func(rps int) int
+type BurstFromRPSFunc func(rps float64) float64
 
 // DefaultBurstFromRPS calculates the empirical dependency of the burst,
 // so that it does not freeze rps.
-func DefaultBurstFromRPS(rps int) int {
-	burst := rps / 500 //nolint:mnd // ok
-	if burst < 1 {
-		burst = 1
-	}
-	if burst > 100 { //nolint:mnd // ok
-		burst = 100
-	}
+func DefaultBurstFromRPS(rps float64) float64 {
+	burst := min(max(rps/500, 1), 100) //nolint:mnd // ok
 	return burst
 }

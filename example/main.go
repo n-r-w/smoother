@@ -17,10 +17,8 @@ import (
 )
 
 const (
-	rps         = 500
+	rps         = 500.0
 	clientCount = 6
-	// redis_rate or throttled limiter
-	useRedisRate = true
 	// use miniredis or redis cluster
 	fakeRedis = true
 	// request to tryer timeout
@@ -59,15 +57,8 @@ func main() {
 			Addr: mr.Addr(),
 		})
 	} else {
-		client = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: []string{
-				"localhost:6379",
-				"localhost:6380",
-				"localhost:6381",
-				"localhost:6382",
-				"localhost:6383",
-				"localhost:6384",
-			},
+		client = redis.NewClient(&redis.Options{
+			Addr: "localhost:6379",
 		})
 	}
 
@@ -77,29 +68,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// github.com/throttled/throttled/v2 tryer
-	throttledTryer, err := smoother.NewRedisThrottledTryer(client, "test", rps)
+	// redis tryer
+	redisRateTryer, err := smoother.NewRedisRateTryer(client, "prefix", "test", rps)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	// github.com/go-redis/redis_rate/v10 tryer
-	redisRateTryer, err := smoother.NewRedisRateTryer(client, "test", rps)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var tryer smoother.Tryer
-
-	if useRedisRate {
-		tryer = redisRateTryer
-	} else {
-		tryer = throttledTryer
 	}
 
 	// Add circuit breaker with inmemory fallback
 	var fallbackTryer *smoother.FallbackTryer
-	if fallbackTryer, err = smoother.NewFallbackTryer(tryer, localTryer,
+	if fallbackTryer, err = smoother.NewFallbackTryer(redisRateTryer, localTryer,
 		smoother.WithFallbackTryerBreakerOptions(
 			breaker.WithErrorThreshold(breakerErrorThreshold),
 			breaker.WithSuccessThreshold(breakerSuccessThreshold),
