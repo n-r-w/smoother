@@ -60,7 +60,7 @@ func (t *Throttler) Execute(
 	}
 
 	if err := t.sem.Acquire(ctxOp, 1); err != nil {
-		return fmt.Errorf("failed to acquire semaphore: %v", err)
+		return fmt.Errorf("failed to acquire semaphore: %w", err)
 	}
 	defer t.sem.Release(1)
 
